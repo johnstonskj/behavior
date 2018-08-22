@@ -188,7 +188,7 @@ a single transition based on the probabilities for each. Once chosen the @italic
 state is made current and the step is complete.
 
 If the current state is an @italic{absorbing} state (see @racket[>--<?]) then the
-execution is said to be complete (see @racket[execution-complete]) and any further
+execution is said to be complete (see @racket[execution-complete?]) and any further
 calls to either @racket[execute] or @racket[execute-next] will have no effect.
 
 @defproc[(make-execution

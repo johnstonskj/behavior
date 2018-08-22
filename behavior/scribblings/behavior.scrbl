@@ -195,7 +195,7 @@ calls to either @racket[execute] or @racket[execute-next] will have no effect.
           [from-chain mkchain?]
           [start-state symbol?]
           [reporter mkchain-reporter? #f])
-         execution?]{
+         (or/c #f execution?)]{
 Create an @racket[execution] structure from the given chain, and given starting
  state. The behavior of the execution depends on whether the execution itself
  keeps track of the execution history or whether the caller does by providing
@@ -209,16 +209,22 @@ Create an @racket[execution] structure from the given chain, and given starting
  @item{Otherwise, all states are recorded and can be retrieved by the
   @racket[execution-trace] function.}
 ]
+
+This function will return @racket[#f] if @racket[start-state] is not valid within
+the chain @racket[from-chain].
 }
 
 @defproc[(make-execution-generator
           [from-chain mkchain?]
           [start-state symbol?])
-         generator?]{
+         (or/c #f generator?)]{
 Create an @racket[execution] generator from the given chain, and given starting
  state.
 
 @bold{Warning:} this function is untested at this time.
+
+This function will return @racket[#f] if @racket[start-state] is not valid within
+the chain @racket[from-chain].
 }
 
 @defproc[(execute

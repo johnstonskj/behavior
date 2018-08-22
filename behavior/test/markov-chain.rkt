@@ -100,6 +100,39 @@
  (check-false (>--<? a-chain 'c))
  (check-true (>--<? a-chain 'd)))
 
+(test-case
+ "row-set: success"
+ (define chain (make-chain
+                (==> 'a (--> 'b 1.0))
+                (==> 'b (--> 'c 1.0))
+                (==>! 'c)))
+ (define row (row-ref chain 'b))
+ (hash-set! row 'c 0.5)
+ (hash-set! row 'a 0.5)
+ (check-not-false (row-set chain 'b row)))
+
+(test-case
+ "row-set: failure (bad state)"
+ (define chain (make-chain
+                (==> 'a (--> 'b 1.0))
+                (==> 'b (--> 'c 1.0))
+                (==>! 'c)))
+ (define row (row-ref chain 'b))
+ (hash-set! row 'c 0.5)
+ (hash-set! row 'd 0.5)
+ (check-false (row-set chain 'b row)))
+
+(test-case
+ "row-set: failure (bad probabilities)"
+ (define chain (make-chain
+                (==> 'a (--> 'b 1.0))
+                (==> 'b (--> 'c 1.0))
+                (==>! 'c)))
+ (define row (row-ref chain 'b))
+ (hash-set! row 'c 0.75)
+ (hash-set! row 'a 0.75)
+ (check-false (row-set chain 'b row)))
+
 ;; ---------- Test Cases - Chain Execution
 
 (test-case
@@ -110,6 +143,10 @@
  (check-true (or
               (= (length (execution-trace an-exec)) 11)
               (equal? (first (execution-trace an-exec)) 'd))))
+
+(test-case
+ "make-execution: failure (bad start state)"
+(check-false (make-execution a-chain 'x)))
 
 (test-case
  "make-execution: success (with reporter)"
@@ -131,4 +168,17 @@
  (check-equal? (execution-state new-exec) 'c)
  (check-true (execution-complete? new-exec))
  (check-equal? (execution-trace new-exec) '(c b a)))
-   
+
+;; ---------- Test Cases - Chain Visualization
+
+(test-case
+ "mkchain->graph-string: success"
+ (define chain (make-chain
+                (==> 'a (--> 'b 1.0))
+                (==> 'b (--> 'c 1.0))
+                (==>! 'c)))
+ (define dot (mkchain->graph-string chain))
+ (check-true (string-prefix? dot "digraph markov_chain {\n"))
+ (check-true (string-contains? dot "    a -> b [label = \"1.0\"];\n"))
+ (check-true (string-contains? dot "    b -> c [label = \"1.0\"];\n"))
+ (check-true (string-suffix? dot "}\n")))

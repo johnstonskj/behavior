@@ -42,10 +42,10 @@
    (-> mkchain? symbol? mkchain-row? (or/c #f mkchain?))]
 
   [make-execution
-   (->* (mkchain? symbol?) (mkchain-reporter?) execution?)]
+   (->* (mkchain? symbol?) (mkchain-reporter?) (or/c #f execution?))]
 
   [make-execution-generator
-   (-> mkchain? symbol? generator?)]
+   (-> mkchain? symbol? (or/c #f generator?))]
 
   [execute
    (-> execution? exact-positive-integer? execution?)]
@@ -210,12 +210,14 @@
 ;; ---------- Internal procedures
 
 (define (make-full-execution chain start-state reporter)
-  (execution
-   (for/hash ([(row-state row) (mkchain-matrix chain)])
-     (values row-state (probability-ranges row)))
-   (list start-state)
-   reporter
-   #f))
+  (if (member start-state (chain-states chain))
+      (execution
+       (for/hash ([(row-state row) (mkchain-matrix chain)])
+         (values row-state (probability-ranges row)))
+       (list start-state)
+       reporter
+       #f)
+      #f))
 
 (define (next exec-chain state)
   (find-next-state
@@ -251,6 +253,3 @@
      (hash-has-key? (mkchain-matrix chain) col))
    (let ([sum (for/sum ([(state probability) row]) probability)])
      (or (= sum 0.0) (= sum 1.0)))))
-
-(define (rotate-head lst)
-  (append (rest lst) (list (first lst))))

@@ -210,7 +210,7 @@ Create an @racket[execution] structure from the given chain, and given starting
   @racket[execution-trace] function.}
 ]
 
-This function will return @racket[#f] if @racket[start-state] is not valid within
+This function will return @racket[#f] if @racket[start-state] is not a state within
 the chain @racket[from-chain].
 }
 
@@ -219,12 +219,21 @@ the chain @racket[from-chain].
           [start-state symbol?])
          (or/c #f generator?)]{
 Create an @racket[execution] generator from the given chain, and given starting
- state.
+ state. The most common usage is in conjunction with @racket[in-producer] and use
+ a stop-value of @racket[#f], as shown below.
 
-@bold{Warning:} this function is untested at this time.
+@examples[ #:eval example-eval
+(define d-chain (make-chain
+                 (==> 'a (--> 'b 1.0))
+                 (==> 'b (--> 'c 1.0))
+                 (==>! 'c)))
+(define next (make-execution-generator d-chain 'a))
+(for ([state (in-producer next #f)])
+  (displayln state))
+]
 
-This function will return @racket[#f] if @racket[start-state] is not valid within
-the chain @racket[from-chain].
+This function will return @racket[#f] if @racket[start-state] is not a state
+ within the chain @racket[from-chain].
 }
 
 @defproc[(execute

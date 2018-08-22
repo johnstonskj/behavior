@@ -22,8 +22,6 @@
 
 (define an-exec (make-execution a-chain 'b))
 
-;; ---------- Internal procedures
-
 ;; ---------- Test Cases - Chain Definition
 
 (test-case
@@ -147,13 +145,30 @@
 
 (test-case
  "make-execution: failure (bad start state)"
-(check-false (make-execution a-chain 'x)))
+ (check-false (make-execution a-chain 'x)))
 
-(ignore-test-case
- "make-execution: success (with reporter)")
+(test-case
+ "make-execution: success (with reporter)"
+ (define d-chain (make-chain
+                  (==> 'a (--> 'b 1.0))
+                  (==> 'b (--> 'c 1.0))
+                  (==>! 'c)))
+ (define out (open-output-string))
+ (define exec (make-execution d-chain 'a (curryr display out)))
+ (check-not-false exec)
+ (execute exec 10)
+ (check-equal? (get-output-string out) "abc"))
 
-(ignore-test-case
- "make-execution-generator: success")
+(test-case
+ "make-execution-generator: success"
+ (define d-chain (make-chain
+                  (==> 'a (--> 'b 1.0))
+                  (==> 'b (--> 'c 1.0))
+                  (==>! 'c)))
+ (define next (make-execution-generator d-chain 'a))
+ (for ([state (in-producer next #f)]
+       [expected '(a b c)])
+   (check-equal? state expected)))
 
 (test-case
  "execute: success (deterministic)"

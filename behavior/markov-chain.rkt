@@ -149,13 +149,14 @@
 ;; ---------- Implementation - Chain Execution
 
 (define (make-execution-generator chain start-state)
-   (generator ()
-              (define exec
-                (make-full-execution
-                 chain
-                 start-state
-                 (λ (next) (yield next))))
-              #f))
+  (define (g-reporter state) (yield state))
+  (generator ()
+             (define exec (make-full-execution chain start-state g-reporter))
+             (when exec
+               (let more ([exec (execute-next exec)])
+                 (if (execution-done exec)
+                     (yield #f)
+                     (more (execute-next exec)))))))
 
 (define (make-execution chain start-state [reporter #f])
   (make-full-execution chain start-state reporter))
@@ -175,7 +176,7 @@
              (cons next-step (execution-steps exec)))
             (begin
               (set-execution-steps! exec (list next-step))
-              (execution-reporter exec) next-step))
+              ((execution-reporter exec) next-step)))
         (set-execution-done! exec #t)))
   exec)
 
@@ -211,12 +212,15 @@
 
 (define (make-full-execution chain start-state reporter)
   (if (member start-state (chain-states chain))
-      (execution
-       (for/hash ([(row-state row) (mkchain-matrix chain)])
-         (values row-state (probability-ranges row)))
-       (list start-state)
-       reporter
-       #f)
+      (let ([exec (execution
+                   (for/hash ([(row-state row) (mkchain-matrix chain)])
+                     (values row-state (probability-ranges row)))
+                   (list start-state)
+                   reporter
+                   #f)])
+        (when (and exec reporter)
+          (reporter start-state))
+        exec)
       #f))
 
 (define (next exec-chain state)

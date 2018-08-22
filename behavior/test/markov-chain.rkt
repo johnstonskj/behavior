@@ -9,7 +9,8 @@
 
 (require rackunit
          ; ---------
-         behavior/markov-chain)
+         behavior/markov-chain
+         "utilities.rkt")
 
 ;; ---------- Test Fixtures
 
@@ -148,13 +149,11 @@
  "make-execution: failure (bad start state)"
 (check-false (make-execution a-chain 'x)))
 
-(test-case
- "make-execution: success (with reporter)"
- (displayln "TODO: make-execution: success (with reporter)"))
+(ignore-test-case
+ "make-execution: success (with reporter)")
 
-(test-case
- "make-execution-generator: success"
- (displayln "TODO: make-execution-generator: success"))
+(ignore-test-case
+ "make-execution-generator: success")
 
 (test-case
  "execute: success (deterministic)"

@@ -89,7 +89,7 @@
    reporter
    [done #:mutable]))
 
-;; ---------- Implementation
+;; ---------- Implementation - Chain Definition
 
 (define mkchain-row?
   (hash/c symbol? real?))
@@ -131,9 +131,7 @@
 
 (define (>--<? chain state)
   (or
-   ; state only transitions to itself
    (= (transition-probability chain state state) 1.0)
-   ; state has no outgoing transitions
    (= (for/sum ([(s probability) (row-ref chain state)])
         probability)
       0.0)))
@@ -147,6 +145,8 @@
         (hash-set! (mkchain-matrix chain) state row)
         chain)
       #f))
+
+;; ---------- Implementation - Chain Execution
 
 (define (make-execution-generator chain start-state)
    (generator ()
@@ -187,6 +187,8 @@
 
 (define (execution-complete? exec)
   (execution-done exec))
+
+;; ---------- Implementation - Chain Visualization
 
 (define (mkchain->graph chain port)
   (displayln "digraph markov_chain {" port)

@@ -70,9 +70,11 @@ Determines whether a contract parameter is a @italic{Markov chain} structure.
 Determines whether a contract parameter is a @italic{Markov chain} row.
 }
 
-@; @defthing[#:kind "contract" mkchain-reporter? contract?]{
-@; Determines whether a contract parameter is a @italic{markov chain} reporter function.
-@; }
+@defthing[#:kind "contract" mkchain-reporter? contract?]{
+Determines whether a contract parameter is a @italic{markov chain} reporter
+ function. Such functions can be used as callbacks when a state transition
+ occurs during execution of a chain.
+}
 
 @defproc[(-->?
           [chain mkchain?]
@@ -165,7 +167,10 @@ Return a row from the transition matrix corresponding to the state @racket[from-
           [chain mkchain?]
           [state symbol?]
           [row mkchain-row?])
-         (or/c #f hash?)]{
+         (or/c #f mkchain?)]{
+Set a row in the transition matrix corresponding to the state @racket[from-state],
+ returning the new chain. If the row itself is invalid in any way the response
+ is @racket[#f] and the chain is unchanged.
 }
 
 @defproc[(chain-states
@@ -177,12 +182,33 @@ Return the list of symbols representing the states of this chain.
 @;{============================================================================}
 @subsection[]{Execution}
 
+An execution takes place according to discrete steps. At each step the set of
+transitions @italic{from} the current state (see @racket[execution-state]) and chooses
+a single transition based on the probabilities for each. Once chosen the @italic{to}
+state is made current and the step is complete.
+
+If the current state is an @italic{absorbing} state (see @racket[>--<?]) then the
+execution is said to be complete (see @racket[execution-complete]) and any further
+calls to either @racket[execute] or @racket[execute-next] will have no effect.
+
 @defproc[(make-execution
           [from-chain mkchain?]
-          [start-state symbol?])
+          [start-state symbol?]
+          [reporter mkchain-reporter? #f])
          execution?]{
 Create an @racket[execution] structure from the given chain, and given starting
- state.
+ state. The behavior of the execution depends on whether the execution itself
+ keeps track of the execution history or whether the caller does by providing
+ a @racket[reporter] function.
+
+@itemlist[
+ @item{When @racket[reporter] is specified the provided function is called with
+  the new state each time one is selected. As the execution is not responsible
+  for tracking the history of the chosen states, the value of the function
+  @racket[execution-trace] is simply the current state.}
+ @item{Otherwise, all states are recorded and can be retrieved by the
+  @racket[execution-trace] function.}
+]
 }
 
 @defproc[(make-execution-generator
@@ -191,29 +217,45 @@ Create an @racket[execution] structure from the given chain, and given starting
          generator?]{
 Create an @racket[execution] generator from the given chain, and given starting
  state.
+
+@bold{Warning:} this function is untested at this time.
 }
 
 @defproc[(execute
           [exec execution?]
-          [steps nonnegative-integer?])
+          [steps exact-positive-integer?])
          execution?]{
-@bold{TODO:} halt execution on stuck states.
+This function will perform a number of @racket[steps], effectively calling the
+ @racket[execute-next] for each step. The response is the new state of the
+ execution.
 }
 
 @defproc[(execute-next
           [exec execution?])
          execution?]{
-Calculate the next state, store it in the execution trace and return an updated
+Calculate the next state, store it in the execution trace, and return an updated
 copy of the execution.
 }
 
 @defproc[(execution-trace
           [exec execution?])
          (listof symbol?)]{
-Return the execution trace, a list of symbols representing the set of all
+Return the execution trace as a list of symbols representing the history of all
 states the chain has been in.
 }
 
+@defproc[(execution-state
+          [exec execution?])
+         symbol?]{
+Return the current state the chain is in.
+}
+
+@defproc[(execution-complete?
+          [exec execution?])
+         boolean?]{
+Return @racket[#t] if the execution has reached an @italic{absorbing}
+ state (see @racket[>--<?]).
+}
 @;{============================================================================}
 @subsection[]{GraphViz}
 

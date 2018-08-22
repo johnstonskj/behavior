@@ -39,23 +39,29 @@
    (-> mkchain? symbol? mkchain-row?)]
 
   [row-set
-   (-> mkchain? symbol? mkchain-row? (or/c #f hash?))]
+   (-> mkchain? symbol? mkchain-row? (or/c #f mkchain?))]
 
   [make-execution
-   (-> mkchain? symbol? execution?)]
+   (->* (mkchain? symbol?) (mkchain-reporter?) execution?)]
 
   [make-execution-generator
    (-> mkchain? symbol? generator?)]
 
   [execute
-   (-> execution? nonnegative-integer? execution?)]
+   (-> execution? exact-positive-integer? execution?)]
 
   [execute-next
    (-> execution? execution?)]
 
+  [execution-state
+   (-> execution? symbol?)]
+
   [execution-trace
    (-> execution? (listof symbol?))]
 
+  [execution-complete?
+   (-> execution? boolean?)]
+  
   [mkchain->graph
    (-> mkchain? port? void?)]
 
@@ -80,7 +86,8 @@
 (struct execution
   (matrix
    [steps #:mutable]
-   reporter))
+   reporter
+   [done #:mutable]))
 
 ;; ---------- Implementation
 
@@ -136,7 +143,9 @@
 
 (define (row-set chain state row)
   (if (row-validate chain row)
-      (hash-set! (mkchain-matrix chain) state row)
+      (begin
+        (hash-set! (mkchain-matrix chain) state row)
+        chain)
       #f))
 
 (define (make-execution-generator chain start-state)
@@ -148,29 +157,36 @@
                  (λ (next) (yield next))))
               #f))
 
-(define (make-execution chain start-state)
-  (make-full-execution chain start-state #f))
+(define (make-execution chain start-state [reporter #f])
+  (make-full-execution chain start-state reporter))
 
 (define (execute exec steps)
-  (when (> steps 0)
+  (when (and (not (execution-done exec)) (> steps 0))
     (execute (execute-next exec) (sub1 steps)))
   exec)
   
 (define (execute-next exec)
-  (define next-step (next (execution-matrix exec) (first (execution-steps exec))))
-  (if next-step
-      (if (equal? (execution-reporter exec) #f)
-          (set-execution-steps!
-           exec
-           (cons next-step (execution-steps exec)))
-          (begin
-            (set-execution-steps! exec (list next-step))
-            (execution-reporter exec) next-step))
-      #f)
+  (when (not (execution-done exec))
+    (define next-step (next (execution-matrix exec) (first (execution-steps exec))))
+    (if next-step
+        (if (equal? (execution-reporter exec) #f)
+            (set-execution-steps!
+             exec
+             (cons next-step (execution-steps exec)))
+            (begin
+              (set-execution-steps! exec (list next-step))
+              (execution-reporter exec) next-step))
+        (set-execution-done! exec #t)))
   exec)
 
 (define (execution-trace exec)
   (execution-steps exec))
+
+(define (execution-state exec)
+  (first (execution-trace exec)))
+
+(define (execution-complete? exec)
+  (execution-done exec))
 
 (define (mkchain->graph chain port)
   (displayln "digraph markov_chain {" port)
@@ -196,7 +212,8 @@
    (for/hash ([(row-state row) (mkchain-matrix chain)])
      (values row-state (probability-ranges row)))
    (list start-state)
-   reporter))
+   reporter
+   #f))
 
 (define (next exec-chain state)
   (find-next-state

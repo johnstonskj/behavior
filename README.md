@@ -9,13 +9,25 @@
 ![MIT License](https://img.shields.io/badge/license-MIT-118811.svg)
 
 This package introduces a set of modeling techniques for exploring behavior in software systems.
+Models such as state machines and Petri nets can be used to model the behavior of a system, and
+Markov chains be used to generate events to help in simulation of systems.
 
 # Modules
 
-* `markov-chain` -- TBD
+* `markov-chain` -- Define the state/transition matrix for a Markov chain and execute the chain
+  resulting in a stream of state events.
 
 # Examples
 
-TBD
+```scheme
+(define a-chain (make-chain 
+                 (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
+                 (==> 'b (--> 'a .5) (--> 'c .5))
+                 (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))))
+(define an-exec (make-execution a-chain 'b))
+(execute an-exec 10)
+(displayln (execution-trace an-exec))
+(displayln (mkchain->graph-string a-chain))
+```
 
 [![Racket Language](https://racket-lang.org/logo-and-text-1-2.png)](https://racket-lang.org/)

@@ -18,4 +18,5 @@
 (define build-deps '(
   "scribble-lib"
   "racket-doc"
+  "sandbox-lib"
   "cover-coveralls"))

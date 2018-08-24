@@ -36,7 +36,8 @@
 (test-case
  "simple state machine: success"
  (define expected '(starting enter-state execute-state handle-event handle-event
-                             transition enter-state execute-state completed))
+                             exit-state transition transition-effect enter-state
+                             execute-state completed))
  (define log-string (open-output-string))
  (with-logging-to-port
      log-string

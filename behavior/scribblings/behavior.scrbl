@@ -4,9 +4,10 @@
           scribble/eval
           behavior/fsm
           behavior/markov-chain
-          (for-label behavior/fsm
-                     behavior/markov-chain
-                     racket/contract))
+          (for-label racket/contract
+                     racket/logging
+                     behavior/fsm
+                     behavior/markov-chain))
 
 @;{============================================================================}
 
@@ -62,8 +63,8 @@ State machine definition details:
         below for event and transition behavior.}
   @item{The model supports @italic{internal transitions} that transition from
         one state to itself without triggering exit or event behavior(s).}
-  @item{Reporters...}
-  @item{Model validation rules:
+  @item{Model validation rules (resulting in @racket[exn:fail:contract] errors
+        from @racket[make-state-machine]):
         @itemlist[
           @item{The model must have one, and only one, start state.}
           @item{The model must have one, and only one, final state.}
@@ -134,6 +135,8 @@ Additional execution details:
         is used, or of guard conditions evaluate to different results. In the
         case where a single transition is enabled on retry the execution
         condition is reset to @racket['active].}
+  @item{Reporters are supported that receive events from the running execution
+        for logging or other behavior.}
   @item{Limitations (compared to UML for example):
         @itemlist[
           @item{The procedure @racket[handle-event] is synchronous, no queue is
@@ -162,6 +165,8 @@ and source @racket[state] to @racket[transition] respectively.
    [entry (-> machine-execution? void?)]
    [execution (-> machine-execution? void?)]
    [exit (-> machine-execution? void?)])]{
+Represents a state within the @racket[state-machine], also included in certain
+@racket[history-event] instances.
 }
 
 @defstruct*[transition
@@ -171,13 +176,17 @@ and source @racket[state] to @racket[transition] respectively.
    [trigger-event symbol?]
    [guard (-> machine-execution? symbol? boolean?)]
    [effect (-> machine-execution? void?)])]{
+Represents a transition within the @racket[state-machine], also included in certain
+@racket[history-event] instances.
 }
 
 @defstruct*[machine-execution
   ([model state-machine?]
    [condition (or/c 'created 'active 'in-error 'complete)]
-   [current-state state?]
-   [reporter (-> history-event? void?)])]{
+   [current-state state?])]{
+This represents the current state of a state machine execution, note that calls
+to @racket[handle-event] and @racket[complete-current-state] return new copies
+of this structure. 
 }
 
 @defstruct*[history-event
@@ -188,6 +197,11 @@ and source @racket[state] to @racket[transition] respectively.
    [transition (or/c #f transition?)]
    [evaluations (listof string?)])
            #:transparent]{
+These events are sent to the reporter associated with discrete actions taken as
+part of the state machine execution. For example, @racket[kind] may be one of
+@racket['starting], @racket['enter-state], @racket['execute-state],
+@racket['exit-state], @racket['handle-event], @racket['transition], 
+@racket['transition-effect], or @racket['completed].
 }
 
 @;{============================================================================}
@@ -197,8 +211,10 @@ and source @racket[state] to @racket[transition] respectively.
           [name symbol?]
           [states (non-empty-listof state?)]
           [transitions (non-empty-listof transition?)]
-          [additional-events (non-empty-listof symbol?) '()])
+          [additional-events (listof symbol?) '()])
           state-machine?]{
+Construct a new @racket[state-machine], all validation of the model is performed
+during construction and reported as @racket[exn:fail:contract] exceptions.
 }
 
 @defproc[(make-state
@@ -208,6 +224,7 @@ and source @racket[state] to @racket[transition] respectively.
           [#:execute execution (-> machine-execution? void?) no-behavior]
           [#:on-exit exit (-> machine-execution? void?) no-behavior])
          state?]{
+Construct a new @racket[state].
 }
 
 @defproc[(make-transition
@@ -218,6 +235,18 @@ and source @racket[state] to @racket[transition] respectively.
           [#:guard guard (-> machine-execution? symbol? boolean?) no-guard]
           [#:execute effect (-> machine-execution? void?) no-behavior])
          transition?]{
+Construct a new @racket[transition], note that by using symbols for the
+@racket[sourvce-name] and @racket[target-name] we do not need to reference
+@racket[state] instances directly and the construction is considerably
+easier to read/understand.
+
+@examples[ #:eval example-eval
+(make-state-machine
+ 'first-fsm
+ (list (make-state 'hello 'start)
+       (make-state 'goodbye 'final))
+ (list (make-transition 'hello 'goodbye #:on-event 'wake)))
+]
 }
 
 @defthing[no-behavior (-> machine-execution? void?)]{
@@ -235,27 +264,46 @@ A default guard implementation that simply returns @racket[#t].
           [from-machine state-machine?]
           [reporter (or/c #f(-> history-event? void?)) #f])
          machine-execution?]{
+Construct a new @racket[machine-execution] using @racket[from-machine] as the
+definition. The returned execution will be in the @racket['created] condition.
 }
 
 @defproc[(execution-start
           [exec machine-execution?])
          machine-execution?]{
+Transition to the start state of the machine. The returned execution will be in
+the @racket['active] condition.
 }
 
 @defproc[(handle-event
           [exec machine-execution?]
           [event symbol?])
          machine-execution?]{
+Consume the @racket[event] and determine the next action. The returned execution
+will be in either the @racket['active], @racket['in-error], or @racket['completed]
+condition.
 }
 
 @defproc[(complete-current-state
           [exec machine-execution?])
           machine-execution?]{
+Complete the current state and determine the next action. The returned execution
+will be in either the @racket['active], @racket['in-error], or @racket['completed]
+condition.
 }
  
 @defproc[(make-logging-reporter
           [a-logger logger? (current-logger)])
          (-> history-event? void?)]{
+Returns a @racket[reporter] function that will accept events and write them to a
+standard racket @racket[logger].
+}
+
+@defproc[(make-channel-reporter)
+         (values channel? (-> history-event? void?))]{
+Returns two values; the first is a newly created @racket[channel] and the
+second is a @racket[reporter] function that will accept events and write them to
+this channel. 
 }
 
 @;{============================================================================}

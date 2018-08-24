@@ -12,4 +12,5 @@
 
 ;; ---------- Test Cases
 
-(test-doc-coverage '(behavior/markov-chain))
+(test-doc-coverage '(behavior/fsm
+                     behavior/markov-chain))

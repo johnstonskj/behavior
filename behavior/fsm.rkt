@@ -36,6 +36,9 @@
   [make-logging-reporter
    (-> logger? (-> history-event? void?))]
 
+  [make-channel-reporter
+   (-> (values channel? (-> history-event? void?)))]
+
   [execution-start
    (-> machine-execution? machine-execution?)]
 
@@ -44,21 +47,27 @@
 
   [complete-current-state
    (-> machine-execution? machine-execution?)])
+
+ (except-out
+  (struct-out state-machine)
+  private-state-machine)
+
+ (except-out
+  (struct-out state)
+  private-state)
+
+ (except-out
+  (struct-out transition)
+  private-transition)
+
+ (except-out
+  (struct-out machine-execution)
+  private-machine-execution
+  machine-execution-reporter)
  
- (struct-out state-machine)
- (except-out private-state-machine)
-
- (struct-out state)
- (except-out private-state)
-
- (struct-out transition)
- (except-out private-transition)
-
- (struct-out machine-execution)
- (except-out private-machine-execution)
-
- (struct-out history-event)
- (except-out private-history-event))
+ (except-out
+  (struct-out history-event)
+  private-history-event))
 
 ;; ---------- Requirements
 
@@ -175,6 +184,11 @@
 
 (define (make-logging-reporter [a-logger (current-logger)])
   (λ (ev) (log-info (~s ev))))
+
+(define (make-channel-reporter)
+  (define reporting-channel (make-channel))
+  (values reporting-channel
+          (λ (ev) (channel-put reporting-channel ev))))
   
 (define (make-machine-execution state-machine [reporter #f])
   (private-machine-execution state-machine
@@ -268,10 +282,13 @@
 (define (exit-state exec transition)
   (unless (transition-internal transition)
     (let ([exit-behavior (state-exit (machine-execution-current-state exec))])
+      (report-exited-state exec exit-behavior)
       (exit-behavior exec)))
   (let* ([guard (transition-guard transition)]
          [result (guard exec)])
     (report-transitioning exec transition guard result))
+  ; do!
+  (report-transitioned exec (transition-effect transition) transition)
   (if (transition-internal transition)
       exec
       (enter-state
@@ -298,14 +315,17 @@
 (define (report-exited-state exec behavior)
   (report-executed-behavior exec 'exit-state behavior))
 
-(define (report-executed-behavior exec kind behavior)
+(define (report-transitioned exec behavior transition)
+  (report-executed-behavior exec 'transition-effect behavior))
+
+(define (report-executed-behavior exec kind behavior [transition #f])
   ((machine-execution-reporter exec)
    (private-history-event
     exec
     (current-inexact-milliseconds)
     kind
     (machine-execution-current-state exec)
-    #f
+    transition
     (if behavior (list (~a behavior)) '()))))
 
 (define (report-event exec event transition)
@@ -327,7 +347,6 @@
     (machine-execution-current-state exec)
     #f
     (cons (~a event) transitions))))
-
 
 (define (report-transitioning exec transition guard guard-result)
   ((machine-execution-reporter exec)

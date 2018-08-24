@@ -18,18 +18,18 @@
                     'first-fsm
                     (list (make-state 'hello 'start)
                           (make-state 'goodbye 'final))
-                    '(sleep)
-                    (list (make-transition 'hello 'goodbye #:on-event 'wake))))
+                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep)))
 
 ;; ---------- Internal procedures
 
 (define (check-log-sequence log-string expected-states)
- (define log-list (string-split (get-output-string log-string) "\n" #:repeat? #t))
- (check-equal? (length log-list) (length expected-states))
- (for ([log-line log-list]
-       [state expected-states])
-   (check-equal? (third (string-split log-line " " #:repeat? #t))
-                 (symbol->string state))))
+  (define log-list (string-split (get-output-string log-string) "\n" #:repeat? #t))
+  (check-equal? (length log-list) (length expected-states))
+  (for ([log-line log-list]
+        [state expected-states])
+    (check-equal? (fourth (string-split log-line " " #:repeat? #t))
+                  (symbol->string state))))
   
 ;; ---------- Test Cases
 
@@ -41,7 +41,7 @@
  (with-logging-to-port
      log-string
    (lambda ()
-     (let* ([exec (make-execution simple-fsm)]
+     (let* ([exec (make-machine-execution simple-fsm)]
             [started (execution-start exec)]
             [next1 (handle-event started 'sleep)]
             [next2 (handle-event next1 'wake)])

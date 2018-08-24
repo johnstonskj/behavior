@@ -9,41 +9,41 @@
  (contract-out
 
   [make-state-machine
-   (-> symbol?
-       (non-empty-listof state?)
-       (non-empty-listof symbol?)
-       (non-empty-listof transition?)
+   (->* (symbol?
+         (non-empty-listof state?)
+         (non-empty-listof transition?))
+        ((non-empty-listof symbol?))
        state-machine?)]
 
   [make-state
    (->* (symbol? (or/c 'start 'normal 'final))
-        (#:on-entry (-> execution? void?)
-         #:execute (-> execution? void?)
-         #:on-exit (-> execution? void?))
+        (#:on-entry (-> machine-execution? void?)
+         #:execute (-> machine-execution? void?)
+         #:on-exit (-> machine-execution? void?))
         state?)]
 
   [make-transition
    (->* (symbol? symbol?)
         (boolean?
          #:on-event symbol?
-         #:guard (-> execution? symbol? boolean?)
-         #:execute (-> execution? void?))
+         #:guard (-> machine-execution? symbol? boolean?)
+         #:execute (-> machine-execution? void?))
         transition?)]
 
-  [make-execution
-   (->* (state-machine?) ((-> history-event? void?)) execution?)]
+  [make-machine-execution
+   (->* (state-machine?) ((-> history-event? void?)) machine-execution?)]
 
   [make-logging-reporter
    (-> logger? (-> history-event? void?))]
 
   [execution-start
-   (-> execution? execution?)]
+   (-> machine-execution? machine-execution?)]
 
   [handle-event
-   (-> execution? symbol? execution?)]
+   (-> machine-execution? symbol? machine-execution?)]
 
   [complete-current-state
-   (-> execution? execution?)])
+   (-> machine-execution? machine-execution?)])
  
  (struct-out state-machine)
  (except-out private-state-machine)
@@ -54,8 +54,8 @@
  (struct-out transition)
  (except-out private-transition)
 
- (struct-out execution)
- (except-out private-execution)
+ (struct-out machine-execution)
+ (except-out private-machine-execution)
 
  (struct-out history-event)
  (except-out private-history-event))
@@ -90,15 +90,16 @@
    effect)
   #:constructor-name private-transition)
 
-(struct execution
+(struct machine-execution
   (model
    condition ; created active in-error complete
    current-state
    reporter)
-  #:constructor-name private-execution)
+  #:constructor-name private-machine-execution)
 
 (struct history-event
-  (time
+  (current-execution
+   time
    kind
    source
    transition
@@ -112,7 +113,7 @@
 
 (define (no-guard exec) #t)
 
-(define (make-state-machine name states additional-events transitions)
+(define (make-state-machine name states transitions [additional-events '()])
   (unless (= (length (filter (λ (s) (equal? (state-kind s) 'start)) states)) 1)
     (raise-argument-error 'make-state-machine "Requires one, and only one, start state" states))
   (unless (= (length (filter (λ (s) (equal? (state-kind s) 'final)) states)) 1)
@@ -167,8 +168,8 @@
 (define (make-logging-reporter [a-logger (current-logger)])
   (λ (ev) (log-info (~s ev))))
   
-(define (make-execution state-machine [reporter #f])
-  (private-execution state-machine
+(define (make-machine-execution state-machine [reporter #f])
+  (private-machine-execution state-machine
                      'created
                      #f
                      (if reporter
@@ -176,11 +177,11 @@
                          (make-logging-reporter (current-output-port)))))
 
 (define (execution-start exec)
-  (unless (equal? (execution-condition exec) 'created)
+  (unless (equal? (machine-execution-condition exec) 'created)
     (raise-argument-error 'execution-start "Cannot call execution-start more than once" 'start))
   (define start-state
     (first (filter (λ (s) (equal? (state-kind s) 'start))
-                   (hash-values (state-machine-states (execution-model exec))))))
+                   (hash-values (state-machine-states (machine-execution-model exec))))))
   (report-starting exec start-state)
   (define start (update-execution-started exec))
   (define started (enter-state start start-state))
@@ -188,11 +189,12 @@
 
 (define (handle-event exec event)
   (check-current-condition 'handle-event exec)
-  (unless (hash-has-key? (state-machine-events (execution-model exec)) event)
+  (unless (hash-has-key? (state-machine-events (machine-execution-model exec)) event)
     (raise-argument-error 'handle-event "Event not part of state machine model" event))
   (define transitions
-    (filter (λ (t) (equal? (transition-source-name t) (state-name (execution-current-state exec))))
-            (hash-ref (state-machine-events (execution-model exec)) event)))
+    (filter (λ (t) (equal? (transition-source-name t)
+                           (state-name (machine-execution-current-state exec))))
+            (hash-ref (state-machine-events (machine-execution-model exec)) event)))
   (cond
     [(equal? transitions '())
      (begin
@@ -214,8 +216,8 @@
     (filter
      (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec))
      (hash-ref
-      (state-machine-transitions (execution-model exec))
-      (state-name (execution-current-state exec))))))
+      (state-machine-transitions (machine-execution-model exec))
+      (state-name (machine-execution-current-state exec))))))
   (cond
     [(equal? transitions '())
      (error "no valid transitions from state")]
@@ -227,27 +229,28 @@
 ;; ---------- Internal procedures
 
 (define (check-current-condition who exec)
-  (when (member (execution-condition exec) '(created completed))
-    (raise-argument-error who "Cannot execute in condition" (execution-condition exec))))
+  (when (member (machine-execution-condition exec) '(created completed))
+    (raise-argument-error who "Cannot execute in condition" (machine-execution-condition exec))))
 
 (define (enter-state exec state)
   (define exec2 (update-execution-state exec state))
-  (define entry-behavior (state-entry (execution-current-state exec2)))
+  (define entry-behavior (state-entry (machine-execution-current-state exec2)))
   (entry-behavior exec2)
   (report-entered-state exec entry-behavior)
-  (define execution-behavior (state-execution (execution-current-state exec2)))
+  (define execution-behavior (state-execution (machine-execution-current-state exec2)))
   (execution-behavior exec2)
   (report-executed-state exec execution-behavior)
   (when (or (member (state-kind state) '(final))
           (= (length
-              (hash-ref (state-machine-transitions (execution-model exec2)) (state-name state)))
+              (hash-ref (state-machine-transitions
+                         (machine-execution-model exec2)) (state-name state)))
              0))
       (report-completed (update-execution-completed exec2)))
   exec2)
 
 (define (exit-state exec transition)
   (unless (transition-internal transition)
-    (let ([exit-behavior (state-exit (execution-current-state exec))])
+    (let ([exit-behavior (state-exit (machine-execution-current-state exec))])
       (exit-behavior exec)))
   (let* ([guard (transition-guard transition)]
          [result (guard exec)])
@@ -256,11 +259,13 @@
       exec
       (enter-state
        exec
-       (hash-ref (state-machine-states (execution-model exec)) (transition-target-name transition)))))
+       (hash-ref (state-machine-states (machine-execution-model exec))
+                 (transition-target-name transition)))))
 
 (define (report-starting exec state)
-  ((execution-reporter exec)
+  ((machine-execution-reporter exec)
    (private-history-event
+    exec
     (current-inexact-milliseconds)
     'starting
     state
@@ -277,58 +282,62 @@
   (report-executed-behavior exec 'exit-state behavior))
 
 (define (report-executed-behavior exec kind behavior)
-  ((execution-reporter exec)
+  ((machine-execution-reporter exec)
    (private-history-event
+    exec
     (current-inexact-milliseconds)
     kind
-    (execution-current-state exec)
+    (machine-execution-current-state exec)
     #f
-    (if behavior (~a behavior) '()))))
+    (if behavior (list (~a behavior)) '()))))
 
 (define (report-event exec event transition)
-  ((execution-reporter exec)
+  ((machine-execution-reporter exec)
    (private-history-event
+    exec
     (current-inexact-milliseconds)
     'handle-event
-    (execution-current-state exec)
+    (machine-execution-current-state exec)
     transition
     (list (~a event)))))
 
 (define (report-transitioning exec transition guard guard-result)
-  ((execution-reporter exec)
+  ((machine-execution-reporter exec)
    (private-history-event
+    exec
     (current-inexact-milliseconds)
     'transition
-    (execution-current-state exec)
+    (machine-execution-current-state exec)
     transition
     (if guard (list (format "~a => ~a" guard guard-result)) '()))))
 
 (define (report-completed exec)
-  ((execution-reporter exec)
+  ((machine-execution-reporter exec)
    (private-history-event
+    exec
     (current-inexact-milliseconds)
     'completed
-    (execution-current-state exec)
+    (machine-execution-current-state exec)
     #f
     '())))
 
 (define (update-execution-state exec new-state)
-  (private-execution
-   (execution-model exec)
-   (execution-condition exec)
+  (private-machine-execution
+   (machine-execution-model exec)
+   (machine-execution-condition exec)
    new-state
-   (execution-reporter exec)))
+   (machine-execution-reporter exec)))
 
 (define (update-execution-started exec)
-  (private-execution
-   (execution-model exec)
+  (private-machine-execution
+   (machine-execution-model exec)
    'started
-   (execution-current-state exec)
-   (execution-reporter exec)))
+   (machine-execution-current-state exec)
+   (machine-execution-reporter exec)))
 
 (define (update-execution-completed exec)
-  (private-execution
-   (execution-model exec)
+  (private-machine-execution
+   (machine-execution-model exec)
    'completed
-   (execution-current-state exec)
-   (execution-reporter exec)))
+   (machine-execution-current-state exec)
+   (machine-execution-reporter exec)))

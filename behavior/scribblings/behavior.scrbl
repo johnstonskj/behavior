@@ -2,14 +2,20 @@
 
 @(require racket/sandbox
           scribble/eval
+          behavior/fsm
           behavior/markov-chain
-          (for-label behavior/markov-chain
+          (for-label behavior/fsm
+                     behavior/markov-chain
                      racket/contract))
 
 @;{============================================================================}
 
 @(define example-eval (make-base-eval
-                      '(require behavior/markov-chain)))
+                      '(require racket/function
+                                racket/logging
+                                racket/string
+                                behavior/fsm
+                                behavior/markov-chain)))
 
 @;{============================================================================}
 
@@ -22,6 +28,207 @@ or simulate real-world systems or act as a test surrogate for components in
 complex systems as they are developed.
 
 @table-of-contents[]
+
+@;{============================================================================}
+@;{============================================================================}
+@section[]{Module behavior/fsm}
+@defmodule[behavior/fsm]
+
+This module provides the ability to define, and then execute, state machines
+using a flexible yet capable model. The definition model provides a @italic{state
+machine} that contains a set of discrete @italic{states}, each state has a set
+of outbound @italic{transitions} each of which may be associated with a
+@italic{trigger event}. Note, wherever possible the terminology and relationships
+in the state machine  model follow those of the
+@hyperlink["https://en.wikipedia.org/wiki/UML_state_machine"]{Unified Modeling
+Language (UML)}.
+
+
+State machine definition details:
+
+@itemlist[
+  @item{All state names, and events, are represented as symbols.}
+  @item{Behaviors are represented as simple procedures that take the current
+        @racket[machine-execution] as a parameter and return void. As the
+        execution instance is immutable the behavior cannot affect the
+        current state.}
+  @item{Transition guards are represented as simple predicates that take the
+        current @racket[machine-execution] as a parameter and return a boolean
+        which indicates whether the transition is @italic{enabled}. As the
+        execution instance is immutable the behavior cannot affect the
+        current state.}
+  @item{Additional events may be passed into the model, these will be recorded
+        if received and will be ignored without error. See execution details
+        below for event and transition behavior.}
+  @item{The model supports @italic{internal transitions} that transition from
+        one state to itself without triggering exit or event behavior(s).}
+  @item{Reporters...}
+  @item{Model validation rules:
+        @itemlist[
+          @item{The model must have one, and only one, start state.}
+          @item{The model must have one, and only one, final state.}
+          @item{Transitions marked as internal must have the same source and
+                target state.}
+        ]}
+  @item{Limitations (compared to UML for example):
+        @itemlist[
+          @item{The model does not currently support nested, or hierarchical,
+                states.}
+          @item{The model does not currently support orthogonal regions.}
+        ]}
+]
+
+@examples[ #:eval example-eval
+(define simple-fsm (make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'start)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep)))
+(define log-string (open-output-string))
+(with-logging-to-port
+    log-string
+  (lambda ()
+    (let* ([exec (make-machine-execution simple-fsm)]
+           [started (execution-start exec)]
+           [next1 (handle-event started 'sleep)]
+           [next2 (handle-event next1 'wake)])
+      (void)))
+  'info)
+(for-each displayln
+          (map (curryr list-tail 3)
+               (map (λ (line) (string-split line " " #:repeat? #t))
+                    (string-split (get-output-string log-string) "\n" #:repeat? #t))))
+]
+
+State machine execution details:
+
+@itemlist[
+  @item{call @racket[execution-start] (created) to start @racket['start] state}
+  @item{state machine advances on @racket[handle-event] or @racket[complete-event]}
+  @item{completion = @racket['final] or terminal state}
+  @item{event consumption/errors}
+  @item{transition selection}
+  @item{Limitations (compared to UML for example):
+        @itemlist[
+          @item{The procedure @racket[hand-event] is synchronous, the  event queues}
+        ]}
+]
+
+@;{============================================================================}
+@subsection[#:tag "fsm:types"]{Types and Predicates}
+
+@defstruct*[state-machine
+  ([name symbol?]
+   [states (hash/c 'symbol state?)]
+   [events (hash/c 'symbol (listof transition?))]
+   [transitions (hash/c 'symbol (listof transition?))])]{
+The state machine definition, returned by @racket[make-state-machine], and which
+defines the states and transitions and has been validated to be correct. The
+three @racket[hash] values are constructed as optimization for the execution and
+comprise @racket[name] to @racket[state], @racket[event] to @racket[transition],
+and source @racket[state] to @racket[transition] respectively.
+}
+
+@defstruct*[state
+  ([name symbol?]
+   [kind (or/c 'start 'normal 'final)]
+   [entry (-> machine-execution? void?)]
+   [execution (-> machine-execution? void?)]
+   [exit (-> machine-execution? void?)])]{
+}
+
+@defstruct*[transition
+  ([source-name symbol?]
+   [target-name symbol?]
+   [internal boolean?]
+   [trigger-event symbol?]
+   [guard (-> machine-execution? symbol? boolean?)]
+   [effect (-> machine-execution? void?)])]{
+}
+
+@defstruct*[machine-execution
+  ([model state-machine?]
+   [condition (or/c 'created 'active 'in-error 'complete)]
+   [current-state state?]
+   [reporter (-> history-event? void?)])]{
+}
+
+@defstruct*[history-event
+  ([current-execution machine-execution?]
+   [time real?]
+   [kind symbol?]
+   [source (or/c #f state?)]
+   [transition (or/c #f transition?)]
+   [evaluations (listof string?)])
+           #:transparent]{
+}
+
+@;{============================================================================}
+@subsection[#:tag "fsm:construction"]{Construction}
+
+@defproc[(make-state-machine
+          [name symbol?]
+          [states (non-empty-listof state?)]
+          [transitions (non-empty-listof transition?)]
+          [additional-events (non-empty-listof symbol?) '()])
+          state-machine?]{
+}
+
+@defproc[(make-state
+          [name symbol?]
+          [kind (or/c 'start 'normal 'final)]
+          [#:on-entry entry (-> machine-execution? void?) no-behavior]
+          [#:execute execution (-> machine-execution? void?) no-behavior]
+          [#:on-exit exit (-> machine-execution? void?) no-behavior])
+         state?]{
+}
+
+@defproc[(make-transition
+          [source-name symbol?]
+          [target-name symbol?]
+          [internal boolean? #f]
+          [#:on-event trigger-event (or/c #f symbol?) #f]
+          [#:guard guard (-> machine-execution? symbol? boolean?) no-guard]
+          [#:execute effect (-> machine-execution? void?) no-behavior])
+         transition?]{
+}
+
+@defthing[no-behavior (-> machine-execution? void?)]{
+}
+
+@defthing[no-guard (-> machine-execution? transition? boolean?)]{
+}
+
+@;{============================================================================}
+@subsection[#:tag "fsm:execution"]{Execution}
+
+@defproc[(make-machine-execution
+          [from-machine state-machine?]
+          [reporter (or/c #f(-> history-event? void?)) #f])
+         machine-execution?]{
+}
+
+@defproc[(execution-start
+          [exec machine-execution?])
+         machine-execution?]{
+}
+
+@defproc[(handle-event
+          [exec machine-execution?]
+          [event symbol?])
+         machine-execution?]{
+}
+
+@defproc[(complete-current-state
+          [exec machine-execution?])
+          machine-execution?]{
+}
+ 
+@defproc[(make-logging-reporter
+          [a-logger logger? (current-logger)])
+         (-> history-event? void?)]{
+}
 
 @;{============================================================================}
 @;{============================================================================}
@@ -48,7 +255,7 @@ in the previous event}".
                  (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
                  (==> 'b (--> 'a .5) (--> 'c .5))
                  (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))))
-(define an-exec (make-execution a-chain 'b))
+(define an-exec (make-chain-execution a-chain 'b))
 (execute an-exec 10)
 (displayln (execution-trace an-exec))
 (displayln (mkchain->graph-string a-chain))
@@ -60,7 +267,7 @@ last; this trace is not a memory, the implementation is still a @italic{classic}
 Markov chain.
 
 @;{============================================================================}
-@subsection[]{Types and Predicates}
+@subsection[#:tag "chain:types"]{Types and Predicates}
 
 @defthing[#:kind "contract" mkchain? contract?]{
 Determines whether a contract parameter is a @italic{Markov chain} structure.
@@ -105,7 +312,7 @@ Wikipedia: "@italic{A state i is called @bold{absorbing} if it is impossible to
 }
 
 @;{============================================================================}
-@subsection[]{Construction}
+@subsection[#:tag "chain:construction"]{Construction}
 
 @defproc[(==>
           [from-state symbol?]
@@ -180,7 +387,7 @@ Return the list of symbols representing the states of this chain.
 }
 
 @;{============================================================================}
-@subsection[]{Execution}
+@subsection[#:tag "chain:execution"]{Execution}
 
 An execution takes place according to discrete steps. At each step the set of
 transitions @italic{from} the current state (see @racket[execution-state]) and chooses
@@ -191,7 +398,7 @@ If the current state is an @italic{absorbing} state (see @racket[>--<?]) then th
 execution is said to be complete (see @racket[execution-complete?]) and any further
 calls to either @racket[execute] or @racket[execute-next] will have no effect.
 
-@defproc[(make-execution
+@defproc[(make-chain-execution
           [from-chain mkchain?]
           [start-state symbol?]
           [reporter mkchain-reporter? #f])
@@ -214,7 +421,7 @@ This function will return @racket[#f] if @racket[start-state] is not a state wit
 the chain @racket[from-chain].
 }
 
-@defproc[(make-execution-generator
+@defproc[(make-chain-execution-generator
           [from-chain mkchain?]
           [start-state symbol?])
          (or/c #f generator?)]{
@@ -227,7 +434,7 @@ Create an @racket[execution] generator from the given chain, and given starting
                  (==> 'a (--> 'b 1.0))
                  (==> 'b (--> 'c 1.0))
                  (==>! 'c)))
-(define next (make-execution-generator d-chain 'a))
+(define next (make-chain-execution-generator d-chain 'a))
 (for ([state (in-producer next #f)])
   (displayln state))
 ]
@@ -272,7 +479,7 @@ Return @racket[#t] if the execution has reached an @italic{absorbing}
  state (see @racket[>--<?]).
 }
 @;{============================================================================}
-@subsection[]{GraphViz}
+@subsection[#:tag "chain:graphviz"]{GraphViz}
 
 It can be very useful to view a Markov chain as a state transition diagram and
 the following functions provide this capability by writing the DOT file format

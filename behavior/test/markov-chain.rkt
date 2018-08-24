@@ -20,7 +20,7 @@
                  (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))
                  (==>! 'd)))
 
-(define an-exec (make-execution a-chain 'b))
+(define an-exec (make-chain-execution a-chain 'b))
 
 ;; ---------- Test Cases - Chain Definition
 
@@ -135,7 +135,7 @@
 ;; ---------- Test Cases - Chain Execution
 
 (test-case
- "make-execution: success"
+ "make-chain-execution: success"
  (check-false (execution-complete? an-exec))
  (check-equal? (execution-trace an-exec) '(b))
  (define new-exec (execute an-exec 10))
@@ -144,28 +144,28 @@
               (equal? (first (execution-trace an-exec)) 'd))))
 
 (test-case
- "make-execution: failure (bad start state)"
- (check-false (make-execution a-chain 'x)))
+ "make-chain-execution: failure (bad start state)"
+ (check-false (make-chain-execution a-chain 'x)))
 
 (test-case
- "make-execution: success (with reporter)"
+ "make-chain-execution: success (with reporter)"
  (define d-chain (make-chain
                   (==> 'a (--> 'b 1.0))
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
  (define out (open-output-string))
- (define exec (make-execution d-chain 'a (curryr display out)))
+ (define exec (make-chain-execution d-chain 'a (curryr display out)))
  (check-not-false exec)
  (execute exec 10)
  (check-equal? (get-output-string out) "abc"))
 
 (test-case
- "make-execution-generator: success"
+ "make-chain-execution-generator: success"
  (define d-chain (make-chain
                   (==> 'a (--> 'b 1.0))
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
- (define next (make-execution-generator d-chain 'a))
+ (define next (make-chain-execution-generator d-chain 'a))
  (for ([state (in-producer next #f)]
        [expected '(a b c)])
    (check-equal? state expected)))
@@ -176,7 +176,7 @@
                   (==> 'a (--> 'b 1.0))
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
- (define d-exec (make-execution d-chain 'a))
+ (define d-exec (make-chain-execution d-chain 'a))
  (check-equal? (execution-state d-exec) 'a)
  (define new-exec (execute d-exec 10))
  (check-equal? (execution-state new-exec) 'c)

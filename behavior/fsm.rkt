@@ -23,7 +23,7 @@
         state?)]
 
   [make-transition
-   (->* (state? state?)
+   (->* (symbol? symbol?)
         (boolean?
          #:on-event symbol?
          #:guard (-> execution? symbol? boolean?)
@@ -34,7 +34,16 @@
    (->* (state-machine?) ((-> history-event? void?)) execution?)]
 
   [make-logging-reporter
-   (-> logger? (-> history-event? void?))])
+   (-> logger? (-> history-event? void?))]
+
+  [execution-start
+   (-> execution? execution?)]
+
+  [handle-event
+   (-> execution? symbol? execution?)]
+
+  [complete-current-state
+   (-> execution? execution?)])
  
  (struct-out state-machine)
  (except-out private-state-machine)
@@ -229,22 +238,25 @@
   (define execution-behavior (state-execution (execution-current-state exec2)))
   (execution-behavior exec2)
   (report-executed-state exec execution-behavior)
-  (if (or (member (state-kind state) '(final))
+  (when (or (member (state-kind state) '(final))
           (= (length
               (hash-ref (state-machine-transitions (execution-model exec2)) (state-name state)))
              0))
-      (report-completed (update-execution-completed exec2))
-      exec2))
+      (report-completed (update-execution-completed exec2)))
+  exec2)
 
 (define (exit-state exec transition)
-  (define exit-behavior (state-exit (execution-current-state exec)))
-  (exit-behavior exec)
+  (unless (transition-internal transition)
+    (let ([exit-behavior (state-exit (execution-current-state exec))])
+      (exit-behavior exec)))
   (let* ([guard (transition-guard transition)]
          [result (guard exec)])
     (report-transitioning exec transition guard result))
-  (enter-state
-   exec
-   (hash-ref (state-machine-states (execution-model exec)) (transition-target-name transition))))
+  (if (transition-internal transition)
+      exec
+      (enter-state
+       exec
+       (hash-ref (state-machine-states (execution-model exec)) (transition-target-name transition)))))
 
 (define (report-starting exec state)
   ((execution-reporter exec)
@@ -320,23 +332,3 @@
    'completed
    (execution-current-state exec)
    (execution-reporter exec)))
-
-;; ---------- Tests
-
-(module+ test
-  (require rackunit racket/logging)
-  (define fsm (make-state-machine
-               'first-fsm
-               (list (make-state 'hello 'start)
-                     (make-state 'goodbye 'final))
-               '(sleep)
-               (list (make-transition 'hello 'goodbye #:on-event 'wake))))
-  (with-logging-to-port
-      (current-output-port)
-    (lambda ()
-      (let* ([exec (make-execution fsm)]
-             [started (execution-start exec)]
-             [next1 (handle-event started 'sleep)]
-             [next2 (handle-event next1 'wake)])
-        (void)))
-    'info))

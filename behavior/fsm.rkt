@@ -120,7 +120,9 @@
 
 (define (no-behavior exec) (void))
 
-(define (no-guard exec) #t)
+(define (no-guard exec event) #t)
+
+(define internal-event (gensym))
 
 (define (make-state-machine name states transitions [additional-events '()])
   (unless (= (length (filter (λ (s) (equal? (state-kind s) 'start)) states)) 1)
@@ -210,15 +212,18 @@
   (check-current-condition 'handle-event exec)
   (unless (hash-has-key? (state-machine-events (machine-execution-model exec)) event)
     (raise-argument-error 'handle-event "Event not part of state machine model" event))
+  
   (define transitions
-    (filter (λ (t) (equal? (transition-source-name t)
-                           (state-name (machine-execution-current-state exec))))
-            (hash-ref (state-machine-events (machine-execution-model exec)) event)))
+    (filter
+     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec internal-event)))
+     (filter (λ (t) (equal? (transition-source-name t)
+                            (state-name (machine-execution-current-state exec))))
+             (hash-ref (state-machine-events (machine-execution-model exec)) event))))
   (cond
     [(equal? transitions '())
      (begin
        (report-event exec event #f)
-       exec)]
+       (update-execution-error exec))]
     [(= (length transitions) 1)
      (let ([actual (first transitions)])
        (report-event exec event actual)
@@ -233,12 +238,14 @@
 
 (define (complete-current-state exec)
   (check-current-condition 'complete-current-state exec)
+  
   (define transitions
     (filter
-     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec)))
+     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec internal-event)))
      (hash-ref
       (state-machine-transitions (machine-execution-model exec))
       (state-name (machine-execution-current-state exec)))))
+
   (cond
     [(equal? transitions '())
      (begin
@@ -284,7 +291,7 @@
       (report-exited-state exec exit-behavior)
       (exit-behavior exec)))
   (let* ([guard (transition-guard transition)]
-         [result (guard exec)])
+         [result (guard exec internal-event)])
     (report-transitioning exec transition guard result))
   ; do!
   (report-transitioned exec (transition-effect transition) transition)

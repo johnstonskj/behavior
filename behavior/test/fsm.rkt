@@ -21,6 +21,26 @@
                     (list (make-transition 'hello 'goodbye #:on-event 'wake))
                     '(sleep)))
 
+(define blocked-fsm (make-state-machine
+                     'first-fsm
+                     (list (make-state 'hello 'start)
+                           (make-state 'goodbye 'final))
+                     (list (make-transition 'hello 'goodbye
+                                            #:on-event 'wake
+                                            #:guard (λ (ex ev) #f)))
+                     '(sleep)))
+
+(define indeterminate-fsm (make-state-machine
+                           'first-fsm
+                           (list (make-state 'hello 'start)
+                                 (make-state 'goodbye 'final))
+                           (list (make-transition 'hello 'goodbye
+                                                  #:on-event 'wake)
+                                 (make-transition 'hello 'goodbye
+                                                  #:on-event 'wake
+                                                  #:guard (λ (ex ev) #t)))
+                           '(sleep)))
+
 ;; ---------- Internal procedures
 
 (define (check-log-sequence log-string expected-states)
@@ -174,10 +194,55 @@
               (handle-event started 'snore))))
 
 (test-case
- "handle-event: fail on no transition")
+ "handle-event: fail on no transition"
+ (define exec (make-machine-execution blocked-fsm))
+ (define in-error (handle-event (execution-start exec) 'wake))
+ (check-equal? (machine-execution-condition in-error) 'in-error))
+
 
 (test-case
- "handle-event: fail on multiple transitions")
+ "handle-event: fail on multiple transitions"
+ (define exec (make-machine-execution indeterminate-fsm))
+ (define in-error (handle-event (execution-start exec) 'wake))
+ (check-equal? (machine-execution-condition in-error) 'in-error))
+
+(test-case
+ "handle-event: success - recover from blocking error"
+ (define guard (make-hash (list (cons 'say-yes #f))))
+ (define recover-fsm (make-state-machine
+                      'first-fsm
+                      (list (make-state 'hello 'start)
+                            (make-state 'goodbye 'final))
+                      (list (make-transition 'hello 'goodbye
+                                             #:on-event 'wake
+                                             #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
+                      '(sleep)))
+ (define exec (make-machine-execution recover-fsm))
+ (define in-error (handle-event (execution-start exec) 'wake))
+ (check-equal? (machine-execution-condition in-error) 'in-error)
+ (hash-set! guard 'say-yes #t)
+ (define recovered (complete-current-state in-error))
+ (check-equal? (machine-execution-condition recovered) 'completed))
+
+(test-case
+ "handle-event: success - recover from indeterminate error"
+ (define guard (make-hash (list (cons 'say-yes #t))))
+ (define recover-fsm (make-state-machine
+                      'first-fsm
+                      (list (make-state 'hello 'start)
+                            (make-state 'goodbye 'final))
+                      (list (make-transition 'hello 'goodbye
+                                             #:on-event 'wake)
+                            (make-transition 'hello 'goodbye
+                                             #:on-event 'wake
+                                             #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
+                      '(sleep)))
+ (define exec (make-machine-execution recover-fsm))
+ (define in-error (handle-event (execution-start exec) 'wake))
+ (check-equal? (machine-execution-condition in-error) 'in-error)
+ (hash-set! guard 'say-yes #f)
+ (define recovered (complete-current-state in-error))
+ (check-equal? (machine-execution-condition recovered) 'completed))
 
 (test-case
  "complete-current-state: success"
@@ -188,8 +253,48 @@
  (check-equal? (state-name (machine-execution-current-state next)) 'goodbye))
 
 (test-case
- "complete-current-state: fail on no transition")
+ "complete-current-state: fail on no transition"
+ (define exec (make-machine-execution blocked-fsm))
+ (define in-error (complete-current-state (execution-start exec)))
+ (check-equal? (machine-execution-condition in-error) 'in-error))
 
 (test-case
- "complete-current-state: fail on multiple transitions")
+ "complete-current-state: fail on multiple transitions"
+ (define exec (make-machine-execution indeterminate-fsm))
+ (define in-error (complete-current-state (execution-start exec)))
+ (check-equal? (machine-execution-condition in-error) 'in-error))
 
+(test-case
+ "complete-current-state: success - recover from blocking error"
+ (define guard (make-hash (list (cons 'say-yes #f))))
+ (define recover-fsm (make-state-machine
+                      'first-fsm
+                      (list (make-state 'hello 'start)
+                            (make-state 'goodbye 'final))
+                      (list (make-transition 'hello 'goodbye
+                                             #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
+                      '(sleep)))
+ (define exec (make-machine-execution recover-fsm))
+ (define in-error (complete-current-state (execution-start exec)))
+ (check-equal? (machine-execution-condition in-error) 'in-error)
+ (hash-set! guard 'say-yes #t)
+ (define recovered (complete-current-state in-error))
+ (check-equal? (machine-execution-condition recovered) 'completed))
+
+(test-case
+ "complete-current-state: success - recover from indeterminate error"
+ (define guard (make-hash (list (cons 'say-yes #t))))
+ (define recover-fsm (make-state-machine
+                      'first-fsm
+                      (list (make-state 'hello 'start)
+                            (make-state 'goodbye 'final))
+                      (list (make-transition 'hello 'goodbye)
+                            (make-transition 'hello 'goodbye
+                                             #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
+                      '(sleep)))
+ (define exec (make-machine-execution recover-fsm))
+ (define in-error (complete-current-state (execution-start exec)))
+ (check-equal? (machine-execution-condition in-error) 'in-error)
+ (hash-set! guard 'say-yes #f)
+ (define recovered (complete-current-state in-error))
+ (check-equal? (machine-execution-condition recovered) 'completed))

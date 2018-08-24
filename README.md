@@ -14,6 +14,7 @@ Markov chains be used to generate events to help in simulation of systems.
 
 # Modules
 
+* `fsm` -- UML-style State Machines including entry/exit/do behaviors and transition effects and guards.
 * `markov-chain` -- Define the state/transition matrix for a Markov chain and execute the chain
   resulting in a stream of state events.
 
@@ -28,6 +29,14 @@ Markov chains be used to generate events to help in simulation of systems.
 (execute an-exec 10)
 (displayln (execution-trace an-exec))
 (displayln (mkchain->graph-string a-chain))
+```
+
+```scheme
+(make-state-machine
+ 'first-fsm
+ (list (make-state 'hello 'start)
+       (make-state 'goodbye 'final))
+ (list (make-transition 'hello 'goodbye #:on-event 'wake)))
 ```
 
 [![Racket Language](https://racket-lang.org/logo-and-text-1-2.png)](https://racket-lang.org/)

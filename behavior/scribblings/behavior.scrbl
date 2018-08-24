@@ -69,6 +69,7 @@ State machine definition details:
           @item{The model must have one, and only one, final state.}
           @item{Transitions marked as internal must have the same source and
                 target state.}
+          @item{A state may only have one outgoing, @italic{unguarded}, transition.}
         ]}
   @item{Limitations (compared to UML for example):
         @itemlist[
@@ -101,17 +102,42 @@ State machine definition details:
                     (string-split (get-output-string log-string) "\n" #:repeat? #t))))
 ]
 
-State machine execution details:
+A state machine is executed by constructing a @racket[machine-execution] and then
+calling @racket[execution-start]. This will transition to the start state and
+perform any behaviors associated with it. The state machine only transitiona from
+one state to another in response to an event (via @racket[handle-event]) or by
+state completion (via @racket[complete-current-state]). The state machine is completed
+when it transitions into either a @racket['final] state, or a state with no
+outgoing transitions.
+
+Additional execution details:
 
 @itemlist[
-  @item{call @racket[execution-start] (created) to start @racket['start] state}
-  @item{state machine advances on @racket[handle-event] or @racket[complete-event]}
-  @item{completion = @racket['final] or terminal state}
-  @item{event consumption/errors}
-  @item{transition selection}
+  @item{A new execution has a condition @racket['created], and will not accept
+        @racket[handle-event] or @racket[complete-current-state] calls until in
+        condition @racket['active].}
+  @item{The call to @racket[execution-start] will alter the condition to
+        @racket['active] and set the current state to the start state.}
+  @item{Once the execution completes the condition is set to @racket['complete]
+        and the state machine will again reject calls to  @racket[handle-event]
+        or @racket[complete-current-state].}
+  @item{When handling an event (if the event is valid for this machine) if no
+        transition leaving the current state is triggered by the event it is
+        logged and ignored. If more than one transition is triggered by the
+        event @italic{and} they are all enabled an error occurs and the
+        execution condition is set to @racket['in-error].}
+  @item{Similarly, when calling @racket[complete-current-state] if no transitions are
+        enabled at this time, or if multiple transitions are enabled, an error
+        occurs.}
+  @item{The last two situations are considered temporary, while the machine
+        indicates an error the actions can be re-tried if a different event
+        is used, or of guard conditions evaluate to different results. In the
+        case where a single transition is enabled on retry the execution
+        condition is reset to @racket['active].}
   @item{Limitations (compared to UML for example):
         @itemlist[
-          @item{The procedure @racket[hand-event] is synchronous, the  event queues}
+          @item{The procedure @racket[handle-event] is synchronous, no queue is
+                provided for incoming events.}
         ]}
 ]
 
@@ -195,9 +221,11 @@ and source @racket[state] to @racket[transition] respectively.
 }
 
 @defthing[no-behavior (-> machine-execution? void?)]{
+A default behavior implementation that does nothing.
 }
 
 @defthing[no-guard (-> machine-execution? transition? boolean?)]{
+A default guard implementation that simply returns @racket[#t].
 }
 
 @;{============================================================================}

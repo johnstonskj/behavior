@@ -31,7 +31,7 @@
     (check-equal? (fourth (string-split log-line " " #:repeat? #t))
                   (symbol->string state))))
   
-;; ---------- Test Cases
+;; ---------- Test Cases - Definition
 
 (test-case
  "simple state machine: success"
@@ -49,3 +49,147 @@
        (void)))
    'info)
  (check-log-sequence log-string expected))
+
+(test-case
+ "make-state-machine: fail on no start event"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'normal)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep))))))
+
+(test-case
+ "make-state-machine: fail on two start events"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'start)
+                          (make-state 'goodbye 'start))
+                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep))))))
+
+(test-case
+ "make-state-machine: fail on no final event"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'start)
+                          (make-state 'goodbye 'normal))
+                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep))))))
+
+(test-case
+ "make-state-machine: fail on two final events"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'final)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep))))))
+
+(test-case
+ "make-state-machine: fail on bad transition source"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'normal)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hi 'goodbye #:on-event 'wake))
+                    '(sleep))))))
+
+
+(test-case
+ "make-state-machine: fail on bad transition target"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'normal)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hello 'bye #:on-event 'wake))
+                    '(sleep))))))
+
+(test-case
+ "make-state-machine: fail on multiple unguarded"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'start)
+                          (make-state 'wait 'normal)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hello 'wait)
+                          (make-transition 'hello 'goodbye #:on-event 'wake))
+                    '(sleep))))))
+
+(test-case
+ "make-state-machine: fail on bad internal transition"
+ (check-exn exn:fail:contract?
+            (λ ()
+              ((make-state-machine
+                    'first-fsm
+                    (list (make-state 'hello 'start)
+                          (make-state 'goodbye 'final))
+                    (list (make-transition 'hello 'goodbye #t #:on-event 'wake))
+                    '(sleep))))))
+
+;; ---------- Test Cases - Execution
+
+(test-case
+ "make-machine-execution: success"
+ (define exec (make-machine-execution simple-fsm))
+ (check-equal? (machine-execution-model exec) simple-fsm)
+ (check-equal? (machine-execution-condition exec) 'created)
+ (check-false (machine-execution-current-state exec)))
+
+(test-case
+ "execution-start: success"
+ (define exec (make-machine-execution simple-fsm))
+ (define started (execution-start exec))
+ (check-equal? (machine-execution-condition started) 'active)
+ (check-equal? (state-name (machine-execution-current-state started)) 'hello))
+
+(test-case
+ "handle-event: success"
+ (define exec (make-machine-execution simple-fsm))
+ (define started (execution-start exec))
+ (define next (handle-event started 'wake))
+ (check-equal? (machine-execution-condition next) 'completed)
+ (check-equal? (state-name (machine-execution-current-state next)) 'goodbye))
+
+(test-case
+ "handle-event: fail on unknown event"
+ (define exec (make-machine-execution simple-fsm))
+ (define started (execution-start exec))
+ (check-exn exn:fail:contract?
+            (λ ()
+              (handle-event started 'snore))))
+
+(test-case
+ "handle-event: fail on no transition")
+
+(test-case
+ "handle-event: fail on multiple transitions")
+
+(test-case
+ "complete-current-state: success"
+ (define exec (make-machine-execution simple-fsm))
+ (define started (execution-start exec))
+ (define next (complete-current-state started))
+ (check-equal? (machine-execution-condition next) 'completed)
+ (check-equal? (state-name (machine-execution-current-state next)) 'goodbye))
+
+(test-case
+ "complete-current-state: fail on no transition")
+
+(test-case
+ "complete-current-state: fail on multiple transitions")
+

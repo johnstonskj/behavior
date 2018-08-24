@@ -134,10 +134,7 @@
                             "Transition's source state must be in state machine" t))
     (unless (hash-has-key? state-hash (transition-target-name t))
       (raise-argument-error 'make-state-machine
-                            "Transition's target state must be in state machine" t))
-    (unless (hash-has-key? state-hash (transition-target-name t))
-      (raise-argument-error 'make-state-machine
-                            "Transition's trigger event must be in state machine" t)))
+                            "Transition's target state must be in state machine" t)))
 
   (define transition-hash
     (for/hash ([state states])
@@ -238,10 +235,10 @@
   (check-current-condition 'complete-current-state exec)
   (define transitions
     (filter
-     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec))
+     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec)))
      (hash-ref
       (state-machine-transitions (machine-execution-model exec))
-      (state-name (machine-execution-current-state exec))))))
+      (state-name (machine-execution-current-state exec)))))
   (cond
     [(equal? transitions '())
      (begin
@@ -271,13 +268,15 @@
   (define execution-behavior (state-execution (machine-execution-current-state exec2)))
   (execution-behavior exec2)
   (report-executed-state exec execution-behavior)
-  (when (or (member (state-kind state) '(final))
+  (if (or (member (state-kind state) '(final))
           (= (length
               (hash-ref (state-machine-transitions
                          (machine-execution-model exec2)) (state-name state)))
              0))
-      (report-completed (update-execution-completed exec2)))
-  exec2)
+      (let ([exec3 (update-execution-completed exec2)])
+        (report-completed exec3)
+        exec3)
+      exec2))
 
 (define (exit-state exec transition)
   (unless (transition-internal transition)
@@ -289,12 +288,11 @@
     (report-transitioning exec transition guard result))
   ; do!
   (report-transitioned exec (transition-effect transition) transition)
+  (define target (hash-ref (state-machine-states (machine-execution-model exec))
+                           (transition-target-name transition)))
   (if (transition-internal transition)
       exec
-      (enter-state
-       exec
-       (hash-ref (state-machine-states (machine-execution-model exec))
-                 (transition-target-name transition)))))
+      (enter-state exec target)))
 
 (define (report-starting exec state)
   ((machine-execution-reporter exec)

@@ -20,16 +20,7 @@ Markov chains be used to generate events to help in simulation of systems.
 
 # Examples
 
-```scheme
-(define a-chain (make-chain 
-                 (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
-                 (==> 'b (--> 'a .5) (--> 'c .5))
-                 (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))))
-(define an-exec (make-execution a-chain 'b))
-(execute an-exec 10)
-(displayln (execution-trace an-exec))
-(displayln (mkchain->graph-string a-chain))
-```
+Define a state machine, a simple one, a start and an end with a transition triggered by a single event.
 
 ```scheme
 (make-state-machine
@@ -37,6 +28,24 @@ Markov chains be used to generate events to help in simulation of systems.
  (list (make-state 'hello 'start)
        (make-state 'goodbye 'final))
  (list (make-transition 'hello 'goodbye #:on-event 'wake)))
+```
+
+Define a Markov chain with 3 states.
+
+```scheme
+(define a-chain (make-chain 
+                 (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
+                 (==> 'b (--> 'a .5) (--> 'c .5))
+                 (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))))
+```
+
+Execute the chain with 10 steps and display the history of events.
+
+```scheme
+(define an-exec (make-execution a-chain 'b))
+(execute an-exec 10)
+(displayln (execution-trace an-exec))
+(displayln (mkchain->graph-string a-chain))
 ```
 
 [![Racket Language](https://racket-lang.org/logo-and-text-1-2.png)](https://racket-lang.org/)

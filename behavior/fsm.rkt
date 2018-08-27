@@ -215,7 +215,7 @@
   
   (define transitions
     (filter
-     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec internal-event)))
+     (λ (t) (or (false? (transition-guard t)) ((transition-guard t) exec event)))
      (filter (λ (t) (equal? (transition-source-name t)
                             (state-name (machine-execution-current-state exec))))
              (hash-ref (state-machine-events (machine-execution-model exec)) event))))
@@ -230,7 +230,8 @@
        (exit-state (if (equal? (machine-execution-condition exec) 'in-error)
                        (update-execution-active exec)
                        exec)
-                   actual))]
+                   actual
+                   event))]
     [(> (length transitions) 1)
      (begin
        (report-event-error exec event transitions)
@@ -285,13 +286,13 @@
         exec3)
       exec2))
 
-(define (exit-state exec transition)
+(define (exit-state exec transition [event internal-event])
   (unless (transition-internal transition)
     (let ([exit-behavior (state-exit (machine-execution-current-state exec))])
       (report-exited-state exec exit-behavior)
       (exit-behavior exec)))
   (let* ([guard (transition-guard transition)]
-         [result (guard exec internal-event)])
+         [result (guard exec event)])
     (report-transitioning exec transition guard result))
   ; do!
   (report-transitioned exec (transition-effect transition) transition)

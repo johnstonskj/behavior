@@ -120,7 +120,7 @@
             (λ ()
               ((make-state-machine
                     'first-fsm
-                    (list (make-state 'hello 'normal)
+                    (list (make-state 'hello 'start)
                           (make-state 'goodbye 'final))
                     (list (make-transition 'hi 'goodbye #:on-event 'wake))
                     '(sleep))))))
@@ -132,7 +132,7 @@
             (λ ()
               ((make-state-machine
                     'first-fsm
-                    (list (make-state 'hello 'normal)
+                    (list (make-state 'hello 'start)
                           (make-state 'goodbye 'final))
                     (list (make-transition 'hello 'bye #:on-event 'wake))
                     '(sleep))))))
@@ -320,3 +320,5 @@
  (hash-set! guard 'say-yes #f)
  (define recovered (complete-current-state in-error))
  (check-equal? (machine-execution-condition recovered) 'completed))
+
+;; TODO: check reporter

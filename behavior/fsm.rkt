@@ -33,14 +33,17 @@
   [make-machine-execution
    (->* (state-machine?) ((-> machine-history-event? void?)) machine-execution?)]
 
-  [execution-start
+  [machine-execution-start
    (-> machine-execution? machine-execution?)]
 
   [handle-event
    (-> machine-execution? symbol? machine-execution?)]
 
   [complete-current-state
-   (-> machine-execution? machine-execution?)])
+   (-> machine-execution? machine-execution?)]
+
+  [machine-execution-complete?
+   (-> machine-execution? boolean?)])
 
  (except-out
   (struct-out state-machine)
@@ -179,11 +182,9 @@
   (private-machine-execution state-machine
                      'created
                      #f
-                     (if reporter
-                         reporter
-                         (make-logging-reporter))))
+                     (if reporter reporter (make-null-reporter))))
 
-(define (execution-start exec)
+(define (machine-execution-start exec)
   (unless (equal? (machine-execution-condition exec) 'created)
     (raise-argument-error 'execution-start "Cannot call execution-start more than once" 'start))
   (define start-state
@@ -247,6 +248,9 @@
      (begin
        (report-complete-error exec transitions)
        (update-execution-error exec))]))
+
+(define (machine-execution-complete? exec)
+  (equal? (machine-execution-condition exec) 'completed))
 
 ;; ---------- Internal procedures
 

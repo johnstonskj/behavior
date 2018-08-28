@@ -18,10 +18,10 @@
    (-> symbol? real? pair?)]
   
   [make-chain
-   (->* () #:rest (listof pair?) (or/c #f mkchain?))]
+   (->* (symbol?) #:rest (listof pair?) (or/c #f mkchain?))]
 
   [make-diagonal-chain
-   (-> (listof symbol?) mkchain?)]
+   (-> symbol? (listof symbol?) mkchain?)]
 
   [mkchain-states
    (-> mkchain? (listof symbol?))]
@@ -42,7 +42,7 @@
    (-> mkchain? symbol? mkchain-row? (or/c #f mkchain?))]
 
   [make-chain-execution
-   (->* (mkchain? symbol?) (mkchain-reporter?) (or/c #f chain-execution?))]
+   (->* (mkchain? symbol?) ((-> chain-history-event? any/c)) (or/c #f chain-execution?))]
 
   [make-chain-execution-generator
    (-> mkchain? symbol? (or/c #f generator?))]
@@ -53,41 +53,55 @@
   [execute-chain-step
    (-> chain-execution? chain-execution?)]
 
-  [execution-chain-state
-   (-> chain-execution? symbol?)]
-
-  [execution-chain-trace
-   (-> chain-execution? (listof symbol?))]
-
-  [execution-chain-complete?
-   (-> chain-execution? boolean?)]
-  
   [mkchain->graph
    (-> mkchain? port? void?)]
 
   [mkchain->graph-string
    (-> mkchain? string?)]
 
-  [mkchain? contract?]
+  [mkchain-row? contract?])
 
-  [mkchain-row? contract?]
+  (except-out
+   (struct-out mkchain)
+   private-mkchain
+   mkchain-matrix)
 
-  [mkchain-reporter? contract?]))
+  (except-out
+   (struct-out chain-execution)
+   private-chain-execution
+   chain-execution-matrix
+   chain-execution-reporter
+   set-chain-execution-complete?!
+   set-chain-execution-state!)
+
+  (except-out
+   (struct-out chain-history-event)
+   private-history-event))
 
 ;; ---------- Requirements
 
-(require racket/generator)
+(require racket/generator behavior/reporter)
 
 ;; ---------- Internal types
 
 (struct mkchain
-  (matrix))
+  (name
+   matrix)
+  #:constructor-name private-mkchain)
 
 (struct chain-execution
-  (matrix
-   [steps #:mutable]
+  (model
+   matrix
+   [state #:mutable]
    reporter
-   [done #:mutable]))
+   [complete? #:mutable])
+  #:constructor-name private-chain-execution)
+
+(struct chain-history-event history-event
+  (current-execution
+   state)
+  #:constructor-name private-history-event
+  #:transparent)
 
 ;; ---------- Implementation - Chain Definition
 
@@ -106,15 +120,16 @@
 (define (--> to-state probability)
   (cons to-state probability))
 
-(define (make-chain . chain-row-pairs)
-  (define a-chain (mkchain (make-hash chain-row-pairs)))
+(define (make-chain name . chain-row-pairs)
+  (define a-chain (private-mkchain name (make-hash chain-row-pairs)))
   (if (for/and ([(state row) (mkchain-matrix a-chain)])
         (row-validate a-chain row))
       a-chain
       #f))
 
-(define (make-diagonal-chain states)
-  (mkchain
+(define (make-diagonal-chain name states)
+  (private-mkchain
+   name
    (make-hash
     (for/list ([state states])
       (cons state (hash state 1.0))))))
@@ -149,12 +164,12 @@
 ;; ---------- Implementation - Chain Execution
 
 (define (make-chain-execution-generator chain start-state)
-  (define (g-reporter state) (yield state))
+  (define (g-reporter ev) (yield (chain-history-event-state ev)))
   (generator ()
              (define exec (make-full-execution chain start-state g-reporter))
              (when exec
                (let more ([exec (execute-chain-step exec)])
-                 (if (chain-execution-done exec)
+                 (if (chain-execution-complete? exec)
                      (yield #f)
                      (more (execute-chain-step exec)))))))
 
@@ -162,32 +177,24 @@
   (make-full-execution chain start-state reporter))
 
 (define (execute-chain exec steps)
-  (when (and (not (chain-execution-done exec)) (> steps 0))
+  (when (and (not (chain-execution-complete? exec)) (> steps 0))
     (execute-chain (execute-chain-step exec) (sub1 steps)))
   exec)
   
 (define (execute-chain-step exec)
-  (when (not (chain-execution-done exec))
-    (define next-step (next (chain-execution-matrix exec) (first (chain-execution-steps exec))))
+  (when (not (chain-execution-complete? exec))
+    (define next-step (next (chain-execution-matrix exec) (chain-execution-state exec)))
     (if next-step
-        (if (equal? (chain-execution-reporter exec) #f)
-            (set-chain-execution-steps!
-             exec
-             (cons next-step (chain-execution-steps exec)))
-            (begin
-              (set-chain-execution-steps! exec (list next-step))
-              ((chain-execution-reporter exec) next-step)))
-        (set-chain-execution-done! exec #t)))
+        (begin
+          (set-chain-execution-state! exec next-step)
+          (when (chain-execution-reporter exec)
+            ((chain-execution-reporter exec)
+             (private-history-event
+              (current-inexact-milliseconds)
+              exec
+              next-step))))
+        (set-chain-execution-complete?! exec #t)))
   exec)
-
-(define (execution-chain-trace exec)
-  (chain-execution-steps exec))
-
-(define (execution-chain-state exec)
-  (first (execution-chain-trace exec)))
-
-(define (execution-chain-complete? exec)
-  (chain-execution-done exec))
 
 ;; ---------- Implementation - Chain Visualization
 
@@ -212,14 +219,17 @@
 
 (define (make-full-execution chain start-state reporter)
   (if (member start-state (mkchain-states chain))
-      (let ([exec (chain-execution
+      (let ([exec (private-chain-execution
+                   (mkchain-name chain)
                    (for/hash ([(row-state row) (mkchain-matrix chain)])
                      (values row-state (probability-ranges row)))
-                   (list start-state)
-                   reporter
+                   start-state
+                   (if reporter reporter (make-null-reporter))
                    #f)])
-        (when (and exec reporter)
-          (reporter start-state))
+        ((chain-execution-reporter exec)
+         (private-history-event (current-inexact-milliseconds)
+                                exec
+                                start-state))
         exec)
       #f))
 

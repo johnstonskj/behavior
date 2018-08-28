@@ -10,7 +10,8 @@
 (require rackunit
          racket/logging
          ; ---------
-         behavior/fsm)
+         behavior/fsm
+         behavior/reporter)
 
 ;; ---------- Test Fixtures
 
@@ -62,8 +63,8 @@
  (with-logging-to-port
      log-string
    (lambda ()
-     (let* ([exec (make-machine-execution simple-fsm)]
-            [started (execution-start exec)]
+     (let* ([exec (make-machine-execution simple-fsm (make-logging-reporter))]
+            [started (machine-execution-start exec)]
             [next1 (handle-event started 'sleep)]
             [next2 (handle-event next1 'wake)])
        (void)))
@@ -173,21 +174,21 @@
 (test-case
  "execution-start: success"
  (define exec (make-machine-execution simple-fsm))
- (define started (execution-start exec))
+ (define started (machine-execution-start exec))
  (check-equal? (machine-execution-condition started) 'active)
  (check-equal? (state-name (machine-execution-current-state started)) 'hello))
 
 (test-case
  "execution-start: fail on second call"
  (define exec (make-machine-execution simple-fsm))
- (define started (execution-start exec))
+ (define started (machine-execution-start exec))
  (check-exn exn:fail:contract?
-            (λ () (execution-start started))))
+            (λ () (machine-execution-start started))))
 
 (test-case
  "handle-event: success"
  (define exec (make-machine-execution simple-fsm))
- (define started (execution-start exec))
+ (define started (machine-execution-start exec))
  (define next (handle-event started 'wake))
  (check-equal? (machine-execution-condition next) 'completed)
  (check-equal? (state-name (machine-execution-current-state next)) 'goodbye))
@@ -202,7 +203,7 @@
 (test-case
  "handle-event: fail on unknown event"
  (define exec (make-machine-execution simple-fsm))
- (define started (execution-start exec))
+ (define started (machine-execution-start exec))
  (check-exn exn:fail:contract?
             (λ ()
               (handle-event started 'snore))))
@@ -210,14 +211,14 @@
 (test-case
  "handle-event: fail on no transition"
  (define exec (make-machine-execution blocked-fsm))
- (define in-error (handle-event (execution-start exec) 'wake))
+ (define in-error (handle-event (machine-execution-start exec) 'wake))
  (check-equal? (machine-execution-condition in-error) 'in-error))
 
 
 (test-case
  "handle-event: fail on multiple transitions"
  (define exec (make-machine-execution indeterminate-fsm))
- (define in-error (handle-event (execution-start exec) 'wake))
+ (define in-error (handle-event (machine-execution-start exec) 'wake))
  (check-equal? (machine-execution-condition in-error) 'in-error))
 
 (test-case
@@ -232,7 +233,7 @@
                                              #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
                       '(sleep)))
  (define exec (make-machine-execution recover-fsm))
- (define in-error (handle-event (execution-start exec) 'wake))
+ (define in-error (handle-event (machine-execution-start exec) 'wake))
  (check-equal? (machine-execution-condition in-error) 'in-error)
  (hash-set! guard 'say-yes #t)
  (define recovered (complete-current-state in-error))
@@ -252,7 +253,7 @@
                                              #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
                       '(sleep)))
  (define exec (make-machine-execution recover-fsm))
- (define in-error (handle-event (execution-start exec) 'wake))
+ (define in-error (handle-event (machine-execution-start exec) 'wake))
  (check-equal? (machine-execution-condition in-error) 'in-error)
  (hash-set! guard 'say-yes #f)
  (define recovered (complete-current-state in-error))
@@ -261,7 +262,7 @@
 (test-case
  "complete-current-state: success"
  (define exec (make-machine-execution simple-fsm))
- (define started (execution-start exec))
+ (define started (machine-execution-start exec))
  (define next (complete-current-state started))
  (check-equal? (machine-execution-condition next) 'completed)
  (check-equal? (state-name (machine-execution-current-state next)) 'goodbye))
@@ -277,13 +278,13 @@
 (test-case
  "complete-current-state: fail on no transition"
  (define exec (make-machine-execution blocked-fsm))
- (define in-error (complete-current-state (execution-start exec)))
+ (define in-error (complete-current-state (machine-execution-start exec)))
  (check-equal? (machine-execution-condition in-error) 'in-error))
 
 (test-case
  "complete-current-state: fail on multiple transitions"
  (define exec (make-machine-execution indeterminate-fsm))
- (define in-error (complete-current-state (execution-start exec)))
+ (define in-error (complete-current-state (machine-execution-start exec)))
  (check-equal? (machine-execution-condition in-error) 'in-error))
 
 (test-case
@@ -297,7 +298,7 @@
                                              #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
                       '(sleep)))
  (define exec (make-machine-execution recover-fsm))
- (define in-error (complete-current-state (execution-start exec)))
+ (define in-error (complete-current-state (machine-execution-start exec)))
  (check-equal? (machine-execution-condition in-error) 'in-error)
  (hash-set! guard 'say-yes #t)
  (define recovered (complete-current-state in-error))
@@ -315,7 +316,7 @@
                                              #:guard (λ (ex ev) (hash-ref guard 'say-yes))))
                       '(sleep)))
  (define exec (make-machine-execution recover-fsm))
- (define in-error (complete-current-state (execution-start exec)))
+ (define in-error (complete-current-state (machine-execution-start exec)))
  (check-equal? (machine-execution-condition in-error) 'in-error)
  (hash-set! guard 'say-yes #f)
  (define recovered (complete-current-state in-error))

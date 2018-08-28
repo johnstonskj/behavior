@@ -10,17 +10,16 @@
 (require rackunit
          ; ---------
          behavior/markov-chain
+         behavior/reporter
          "utilities.rkt")
 
 ;; ---------- Test Fixtures
 
-(define a-chain (make-chain 
+(define a-chain (make-chain 'simple-chain
                  (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
                  (==> 'b (--> 'c .5) (--> 'd .5))
                  (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))
                  (==>! 'd)))
-
-(define an-exec (make-chain-execution a-chain 'b))
 
 ;; ---------- Test Cases - Chain Definition
 
@@ -46,18 +45,18 @@
 
 (test-case
  "make-chain: failure (bad graph)"
- (check-false (make-chain (==> 'a (--> 'c 1.0)))))
+ (check-false (make-chain 'bad (==> 'a (--> 'c 1.0)))))
 
 (test-case
  "make-chain: failure (bad probabilities)"
- (check-false (make-chain (==> 'a (--> 'a 1.5))))
- (check-false (make-chain (==> 'a (--> 'a .75) (--> 'b .75))
+ (check-false (make-chain 'bad (==> 'a (--> 'a 1.5))))
+ (check-false (make-chain 'bad (==> 'a (--> 'a .75) (--> 'b .75))
                           (==>! 'b))))
 
 (test-case
  "make-diagonal-chain: success"
  (define states '(a b c d))
- (define diagonal (make-diagonal-chain states))
+ (define diagonal (make-diagonal-chain 'success states))
  (check-equal? (sort (mkchain-states a-chain) symbol<?) '(a b c d))
  (for ([state states])
    (define a-row (row-ref diagonal state))
@@ -101,7 +100,7 @@
 
 (test-case
  "row-set: success"
- (define chain (make-chain
+ (define chain (make-chain 'success
                 (==> 'a (--> 'b 1.0))
                 (==> 'b (--> 'c 1.0))
                 (==>! 'c)))
@@ -112,7 +111,7 @@
 
 (test-case
  "row-set: failure (bad state)"
- (define chain (make-chain
+ (define chain (make-chain 'bad
                 (==> 'a (--> 'b 1.0))
                 (==> 'b (--> 'c 1.0))
                 (==>! 'c)))
@@ -123,7 +122,7 @@
 
 (test-case
  "row-set: failure (bad probabilities)"
- (define chain (make-chain
+ (define chain (make-chain 'bad
                 (==> 'a (--> 'b 1.0))
                 (==> 'b (--> 'c 1.0))
                 (==>! 'c)))
@@ -136,12 +135,17 @@
 
 (test-case
  "make-chain-execution: success"
- (check-false (execution-chain-complete? an-exec))
- (check-equal? (execution-chain-trace an-exec) '(b))
- (define new-exec (execute-chain an-exec 10))
- (check-true (or
-              (= (length (execution-chain-trace an-exec)) 11)
-              (equal? (first (execution-chain-trace an-exec)) 'd))))
+ (let-values ([(buffer reporter) (make-buffering-reporter (λ (ev) (chain-history-event-state ev)))])
+   (define an-exec (make-chain-execution
+                    a-chain
+                    'b
+                    reporter))
+   (check-false (chain-execution-complete? an-exec))
+   (check-equal? (buffer) '(b))
+   (define new-exec (execute-chain an-exec 10))
+   (check-true (or
+                (= (length (buffer)) 11)
+                (equal? (first (buffer)) 'd)))))
 
 (test-case
  "make-chain-execution: failure (bad start state)"
@@ -149,19 +153,21 @@
 
 (test-case
  "make-chain-execution: success (with reporter)"
- (define d-chain (make-chain
+ (define d-chain (make-chain 'success
                   (==> 'a (--> 'b 1.0))
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
  (define out (open-output-string))
- (define exec (make-chain-execution d-chain 'a (curryr display out)))
+ (define exec (make-chain-execution
+               d-chain 'a
+               (λ (ev) (display (chain-history-event-state ev) out))))
  (check-not-false exec)
  (execute-chain exec 10)
  (check-equal? (get-output-string out) "abc"))
 
 (test-case
  "make-chain-execution-generator: success"
- (define d-chain (make-chain
+ (define d-chain (make-chain 'success
                   (==> 'a (--> 'b 1.0))
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
@@ -172,22 +178,26 @@
 
 (test-case
  "execute: success (deterministic)"
- (define d-chain (make-chain
+ (define d-chain (make-chain 'success
                   (==> 'a (--> 'b 1.0))
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
- (define d-exec (make-chain-execution d-chain 'a))
- (check-equal? (execution-chain-state d-exec) 'a)
- (define new-exec (execute-chain d-exec 10))
- (check-equal? (execution-chain-state new-exec) 'c)
- (check-true (execution-chain-complete? new-exec))
- (check-equal? (execution-chain-trace new-exec) '(c b a)))
+ (let-values ([(buffer reporter) (make-buffering-reporter (λ (ev) (chain-history-event-state ev)))])
+   (define d-exec (make-chain-execution
+                   d-chain
+                   'a
+                   reporter))
+   (check-equal? (buffer) '(a))
+   (define new-exec (execute-chain d-exec 10))
+   (check-equal? (chain-execution-state new-exec) 'c)
+   (check-true (chain-execution-complete? new-exec))
+   (check-equal? (buffer) '(c b a))))
 
 ;; ---------- Test Cases - Chain Visualization
 
 (test-case
  "mkchain->graph-string: success"
- (define chain (make-chain
+ (define chain (make-chain 'success
                 (==> 'a (--> 'b 1.0))
                 (==> 'b (--> 'c 1.0))
                 (==>! 'c)))

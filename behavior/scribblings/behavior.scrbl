@@ -4,19 +4,26 @@
           scribble/eval
           behavior/fsm
           behavior/markov-chain
+          behavior/petri-net
+          behavior/reporter
           (for-label racket/contract
                      racket/logging
                      behavior/fsm
-                     behavior/markov-chain))
+                     behavior/markov-chain
+                     behavior/petri-net
+                     behavior/reporter))
 
 @;{============================================================================}
 
 @(define example-eval (make-base-eval
                       '(require racket/function
                                 racket/logging
+                                racket/set
                                 racket/string
                                 behavior/fsm
-                                behavior/markov-chain)))
+                                behavior/markov-chain
+                                behavior/petri-net
+                                behavior/reporter)))
 
 @;{============================================================================}
 
@@ -91,8 +98,8 @@ State machine definition details:
 (with-logging-to-port
     log-string
   (lambda ()
-    (let* ([exec (make-machine-execution simple-fsm)]
-           [started (execution-start exec)]
+    (let* ([exec (make-machine-execution simple-fsm (make-logging-reporter))]
+           [started (machine-execution-start exec)]
            [next1 (handle-event started 'sleep)]
            [next2 (handle-event next1 'wake)])
       (void)))
@@ -267,11 +274,17 @@ Construct a new @racket[machine-execution] using @racket[from-machine] as the
 definition. The returned execution will be in the @racket['created] condition.
 }
 
-@defproc[(execution-start
+@defproc[(machine-execution-start
           [exec machine-execution?])
          machine-execution?]{
 Transition to the start state of the machine. The returned execution will be in
 the @racket['active] condition.
+}
+
+@defproc[(machine-execution-complete?
+          [exec machine-execution?])
+         boolean?]{
+Returns @racket[#t] if the execution is in the @racket['completed] condition.
 }
 
 @defproc[(handle-event
@@ -330,18 +343,23 @@ Markov chain.
 @;{============================================================================}
 @subsection[#:tag "chain:types"]{Types and Predicates}
 
-@defthing[#:kind "contract" mkchain? contract?]{
-Determines whether a contract parameter is a @italic{Markov chain} structure.
+@defstruct*[mkchain
+  ([name symbol?])]{
+}
+
+@defstruct*[chain-execution
+  ([model symbol?]
+   [state symbol?]
+   [complete? boolean?])]{
+}
+
+@defstruct*[(chain-history-event history-event)
+  ([current-execution chain-execution?]
+   [state symbol?])]{
 }
 
 @defthing[#:kind "contract" mkchain-row? contract?]{
 Determines whether a contract parameter is a @italic{Markov chain} row.
-}
-
-@defthing[#:kind "contract" mkchain-reporter? contract?]{
-Determines whether a contract parameter is a @italic{markov chain} reporter
- function. Such functions can be used as callbacks when a state transition
- occurs during execution of a chain.
 }
 
 @defproc[(-->?
@@ -400,6 +418,7 @@ Construct a transition pair that represents the target of a transition and it's
 }
   
 @defproc[(make-chain
+          [name symbol?]
           [pair (pairof symbol? mkchain-row?)] ...+)
          (or/c #f mkchain?)]{
 Make a new @racket[mkchain] structure from the list of symbol and row pairs.
@@ -416,6 +435,7 @@ This function will return @racket[#f] if any of the provided pairs are invalid.
 }
 
 @defproc[(make-diagonal-chain
+          [name symbol?]
           [state symbol?] ...+)
          mkchain?]{
 Make a new @racket[mkchain] where the only transitions are the self-transitions
@@ -520,13 +540,6 @@ Calculate the next state, store it in the execution trace, and return an updated
 copy of the execution.
 }
 
-@defproc[(execution-chain-trace
-          [exec execution?])
-         (listof symbol?)]{
-Return the execution trace as a list of symbols representing the history of all
-states the chain has been in.
-}
-
 @defproc[(execution-chain-state
           [exec execution?])
          symbol?]{
@@ -567,10 +580,112 @@ Return a Graphviz representation of the provided chain as a string.
 
 @;{============================================================================}
 @;{============================================================================}
+@section[]{Module behavior/petri-net}
+@defmodule[behavior/petri-net]
+
+TBD
+
+@examples[ #:eval example-eval
+(define net (make-petri-net 'first-net
+                            (set 'a 'b)
+                            (set 't)
+                            (set (make-arc 'a 't 1)
+                                 (make-arc 't 'b 1))))
+(define reporter (λ (ev)
+                   (displayln
+                    (format "~a ~a ~a"
+                            (net-history-event-place-or-transition ev)
+                            (net-history-event-kind ev)
+                            (net-history-event-tokens ev)))))
+(define exec (make-net-execution net (hash 'a 1) reporter))
+(execute-net exec)
+]
+
+@;{============================================================================}
+@subsection[#:tag "petri:types"]{Types and Predicates}
+
+@defstruct*[petri-net
+  ([name symbol?]
+   [colored? boolean?])]{
+}
+
+@defstruct*[arc
+  ([from symbol?]
+   [to symbol?]
+   [threshold exact-nonnegative-integer?])]{
+}
+
+@defstruct*[net-execution
+  ([model petri-net?]
+   [place-tokens (hash/c symbol (listof symbol?))])]{
+}
+
+@defstruct*[(net-history-event history-event)
+  ([current-execution net-execution?]
+   [kind symbol?]
+   [place-or-transition symbol?]
+   [tokens list?])]{
+}
+
+
+@;{============================================================================}
+@subsection[#:tag "petri:construction"]{Construction}
+
+
+@defproc[(make-petri-net
+          [name symbol?]
+          [places (set/c symbol?)]
+          [transitions (set/c symbol?)]
+          [arcs (set/c arc?)]
+          [#:inhibitors? inhibitors? boolean? #f])
+        petri-net?]{
+}
+  
+@defproc[(make-arc
+          [from symbol?]
+          [to symbol?]
+          [threshold exact-nonnegative-integer?])
+         arc?]{
+}
+
+@;{============================================================================}
+@subsection[#:tag "petri:execution"]{Execution}
+
+
+@defproc[(make-net-execution
+          [model petri-net?]
+          [configuration (hash/c symbol? (or/c exact-nonnegative-integer? (listof symbol?)))]
+          [reporter (-> net-history-event? void?) #f])
+         net-execution?]{
+}
+
+@defproc[(execute-net
+         [exec net-execution?])
+         net-execution?]{
+}
+
+@defproc[(execute-net-step
+          [exec net-execution?])
+         net-execution?]{
+}
+
+@defproc[(net-execution-complete?
+          [exec net-execution?])
+         boolean?]{
+}
+
+@;{============================================================================}
+@;{============================================================================}
 @section[]{Module behavior/reporter}
 @defmodule[behavior/reporter]
 
-TBD
+This module provides a set of functions that construct @racket[reporter] functions
+used be the models above. Effectively, each of the behavior models will emit
+@racket[history-event]s that correspond to changes in the execution state.
+
+To this end the @italic{make-?-execution} functions will take a @italic{reporter}
+optional parameter. In general, if no reporter is specified, the null
+(@racket[make-null-reporter]) reporter is used.
 
 @defstruct*[history-event
   ([time real?])
@@ -578,6 +693,22 @@ TBD
 These events are sent to a reporter function to denote an action taken place
 within a behavior execution. These structures cannot be created directly,
 it is intended as the parent of behavior-specific history events.}
+
+@defproc[(make-null-reporter)
+         (-> history-event? void?)]{
+Creates a reporter that consumes all events and does nothing.
+}
+
+@defproc[(make-buffering-reporter
+          [selector (-> history-event? any/c)])
+         (values (-> list?)
+                 (-> history-event? void?))]{
+This function creates a reporter that buffers all the events sent to it. It
+returns two values; the first if a function that returns the current buffer
+as a list, the second is the @racket[reporter] function itself. The @racket[selector]
+function is called to buffer a subset of the passed event, else the entire event is
+buffered.
+}
 
 @defproc[(make-channel-reporter)
          (values channel? (-> history-event? void?))]{
@@ -597,6 +728,6 @@ standard racket @racket[logger].
           [port output-port?])
          (-> history-event? void?)]{
 Returns a @racket[reporter] function that will accept events and write them to a
-standard racket @racket[logger].
+standard racket @racket[output-port?].
 }
 

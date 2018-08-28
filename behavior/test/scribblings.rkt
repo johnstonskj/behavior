@@ -13,4 +13,6 @@
 ;; ---------- Test Cases
 
 (test-doc-coverage '(behavior/fsm
-                     behavior/markov-chain))
+                     behavior/markov-chain
+                     behavior/petri-net
+                     behavior/reporter))

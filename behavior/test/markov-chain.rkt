@@ -26,7 +26,7 @@
 
 (test-case
  "make-chain: success"
- (check-equal? (sort (chain-states a-chain) symbol<?) '(a b c d))
+ (check-equal? (sort (mkchain-states a-chain) symbol<?) '(a b c d))
  (define a-row (row-ref a-chain 'a))
  (check-equal? (hash-count a-row) 3)
  (check-equal? (hash-ref a-row 'a) .5)
@@ -58,7 +58,7 @@
  "make-diagonal-chain: success"
  (define states '(a b c d))
  (define diagonal (make-diagonal-chain states))
- (check-equal? (sort (chain-states a-chain) symbol<?) '(a b c d))
+ (check-equal? (sort (mkchain-states a-chain) symbol<?) '(a b c d))
  (for ([state states])
    (define a-row (row-ref diagonal state))
    (check-equal? (hash-count a-row) 1)
@@ -136,12 +136,12 @@
 
 (test-case
  "make-chain-execution: success"
- (check-false (execution-complete? an-exec))
- (check-equal? (execution-trace an-exec) '(b))
- (define new-exec (execute an-exec 10))
+ (check-false (execution-chain-complete? an-exec))
+ (check-equal? (execution-chain-trace an-exec) '(b))
+ (define new-exec (execute-chain an-exec 10))
  (check-true (or
-              (= (length (execution-trace an-exec)) 11)
-              (equal? (first (execution-trace an-exec)) 'd))))
+              (= (length (execution-chain-trace an-exec)) 11)
+              (equal? (first (execution-chain-trace an-exec)) 'd))))
 
 (test-case
  "make-chain-execution: failure (bad start state)"
@@ -156,7 +156,7 @@
  (define out (open-output-string))
  (define exec (make-chain-execution d-chain 'a (curryr display out)))
  (check-not-false exec)
- (execute exec 10)
+ (execute-chain exec 10)
  (check-equal? (get-output-string out) "abc"))
 
 (test-case
@@ -177,11 +177,11 @@
                   (==> 'b (--> 'c 1.0))
                   (==>! 'c)))
  (define d-exec (make-chain-execution d-chain 'a))
- (check-equal? (execution-state d-exec) 'a)
- (define new-exec (execute d-exec 10))
- (check-equal? (execution-state new-exec) 'c)
- (check-true (execution-complete? new-exec))
- (check-equal? (execution-trace new-exec) '(c b a)))
+ (check-equal? (execution-chain-state d-exec) 'a)
+ (define new-exec (execute-chain d-exec 10))
+ (check-equal? (execution-chain-state new-exec) 'c)
+ (check-true (execution-chain-complete? new-exec))
+ (check-equal? (execution-chain-trace new-exec) '(c b a)))
 
 ;; ---------- Test Cases - Chain Visualization
 

@@ -23,7 +23,7 @@
   [make-diagonal-chain
    (-> (listof symbol?) mkchain?)]
 
-  [chain-states
+  [mkchain-states
    (-> mkchain? (listof symbol?))]
 
   [-->?
@@ -47,19 +47,19 @@
   [make-chain-execution-generator
    (-> mkchain? symbol? (or/c #f generator?))]
 
-  [execute
+  [execute-chain
    (-> chain-execution? exact-positive-integer? chain-execution?)]
 
-  [execute-next
+  [execute-chain-step
    (-> chain-execution? chain-execution?)]
 
-  [execution-state
+  [execution-chain-state
    (-> chain-execution? symbol?)]
 
-  [execution-trace
+  [execution-chain-trace
    (-> chain-execution? (listof symbol?))]
 
-  [execution-complete?
+  [execution-chain-complete?
    (-> chain-execution? boolean?)]
   
   [mkchain->graph
@@ -119,7 +119,7 @@
     (for/list ([state states])
       (cons state (hash state 1.0))))))
 
-(define (chain-states chain)
+(define (mkchain-states chain)
   (hash-keys (mkchain-matrix chain)))
 
 (define (-->? chain from-state to-state)
@@ -153,20 +153,20 @@
   (generator ()
              (define exec (make-full-execution chain start-state g-reporter))
              (when exec
-               (let more ([exec (execute-next exec)])
+               (let more ([exec (execute-chain-step exec)])
                  (if (chain-execution-done exec)
                      (yield #f)
-                     (more (execute-next exec)))))))
+                     (more (execute-chain-step exec)))))))
 
 (define (make-chain-execution chain start-state [reporter #f])
   (make-full-execution chain start-state reporter))
 
-(define (execute exec steps)
+(define (execute-chain exec steps)
   (when (and (not (chain-execution-done exec)) (> steps 0))
-    (execute (execute-next exec) (sub1 steps)))
+    (execute-chain (execute-chain-step exec) (sub1 steps)))
   exec)
   
-(define (execute-next exec)
+(define (execute-chain-step exec)
   (when (not (chain-execution-done exec))
     (define next-step (next (chain-execution-matrix exec) (first (chain-execution-steps exec))))
     (if next-step
@@ -180,13 +180,13 @@
         (set-chain-execution-done! exec #t)))
   exec)
 
-(define (execution-trace exec)
+(define (execution-chain-trace exec)
   (chain-execution-steps exec))
 
-(define (execution-state exec)
-  (first (execution-trace exec)))
+(define (execution-chain-state exec)
+  (first (execution-chain-trace exec)))
 
-(define (execution-complete? exec)
+(define (execution-chain-complete? exec)
   (chain-execution-done exec))
 
 ;; ---------- Implementation - Chain Visualization
@@ -211,7 +211,7 @@
 ;; ---------- Internal procedures
 
 (define (make-full-execution chain start-state reporter)
-  (if (member start-state (chain-states chain))
+  (if (member start-state (mkchain-states chain))
       (let ([exec (chain-execution
                    (for/hash ([(row-state row) (mkchain-matrix chain)])
                      (values row-state (probability-ranges row)))

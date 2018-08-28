@@ -456,7 +456,7 @@ Set a row in the transition matrix corresponding to the state @racket[from-state
  is @racket[#f] and the chain is unchanged.
 }
 
-@defproc[(chain-states
+@defproc[(mkchain-states
           [chain mkchain?])
          (listof string?)]{
 Return the list of symbols representing the states of this chain.
@@ -519,7 +519,7 @@ This function will return @racket[#f] if @racket[start-state] is not a state
  within the chain @racket[from-chain].
 }
 
-@defproc[(execute
+@defproc[(execute-chain
           [exec execution?]
           [steps exact-positive-integer?])
          execution?]{
@@ -528,27 +528,27 @@ This function will perform a number of @racket[steps], effectively calling the
  execution.
 }
 
-@defproc[(execute-next
+@defproc[(execute-chain-step
           [exec execution?])
          execution?]{
 Calculate the next state, store it in the execution trace, and return an updated
 copy of the execution.
 }
 
-@defproc[(execution-trace
+@defproc[(execution-chain-trace
           [exec execution?])
          (listof symbol?)]{
 Return the execution trace as a list of symbols representing the history of all
 states the chain has been in.
 }
 
-@defproc[(execution-state
+@defproc[(execution-chain-state
           [exec execution?])
          symbol?]{
 Return the current state the chain is in.
 }
 
-@defproc[(execution-complete?
+@defproc[(execution-chain-complete?
           [exec execution?])
          boolean?]{
 Return @racket[#t] if the execution has reached an @italic{absorbing}

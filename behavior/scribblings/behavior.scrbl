@@ -166,7 +166,7 @@ and source @racket[state] to @racket[transition] respectively.
    [execution (-> machine-execution? void?)]
    [exit (-> machine-execution? void?)])]{
 Represents a state within the @racket[state-machine], also included in certain
-@racket[history-event] instances.
+@racket[machine-history-event] instances.
 }
 
 @defstruct*[transition
@@ -177,7 +177,7 @@ Represents a state within the @racket[state-machine], also included in certain
    [guard (-> machine-execution? symbol? boolean?)]
    [effect (-> machine-execution? void?)])]{
 Represents a transition within the @racket[state-machine], also included in certain
-@racket[history-event] instances.
+@racket[machine-history-event] instances.
 }
 
 @defstruct*[machine-execution
@@ -189,9 +189,8 @@ to @racket[handle-event] and @racket[complete-current-state] return new copies
 of this structure. 
 }
 
-@defstruct*[history-event
+@defstruct*[(machine-history-event history-event)
   ([current-execution machine-execution?]
-   [time real?]
    [kind symbol?]
    [source (or/c #f state?)]
    [transition (or/c #f transition?)]
@@ -262,7 +261,7 @@ A default guard implementation that simply returns @racket[#t].
 
 @defproc[(make-machine-execution
           [from-machine state-machine?]
-          [reporter (or/c #f(-> history-event? void?)) #f])
+          [reporter (or/c #f (-> machine-history-event? void?)) #f])
          machine-execution?]{
 Construct a new @racket[machine-execution] using @racket[from-machine] as the
 definition. The returned execution will be in the @racket['created] condition.
@@ -290,20 +289,6 @@ condition.
 Complete the current state and determine the next action. The returned execution
 will be in either the @racket['active], @racket['in-error], or @racket['completed]
 condition.
-}
- 
-@defproc[(make-logging-reporter
-          [a-logger logger? (current-logger)])
-         (-> history-event? void?)]{
-Returns a @racket[reporter] function that will accept events and write them to a
-standard racket @racket[logger].
-}
-
-@defproc[(make-channel-reporter)
-         (values channel? (-> history-event? void?))]{
-Returns two values; the first is a newly created @racket[channel] and the
-second is a @racket[reporter] function that will accept events and write them to
-this channel. 
 }
 
 @;{============================================================================}
@@ -578,5 +563,40 @@ Write a Graphviz representation of the provided chain to the provided output por
           [chain mkchain?])
          string?]{
 Return a Graphviz representation of the provided chain as a string.
+}
+
+@;{============================================================================}
+@;{============================================================================}
+@section[]{Module behavior/reporter}
+@defmodule[behavior/reporter]
+
+TBD
+
+@defstruct*[history-event
+  ([time real?])
+            #:transparent]{
+These events are sent to a reporter function to denote an action taken place
+within a behavior execution. These structures cannot be created directly,
+it is intended as the parent of behavior-specific history events.}
+
+@defproc[(make-channel-reporter)
+         (values channel? (-> history-event? void?))]{
+Returns two values; the first is a newly created @racket[channel] and the
+second is a @racket[reporter] function that will accept events and write them to
+this channel. 
+}
+
+@defproc[(make-logging-reporter
+          [a-logger logger? (current-logger)])
+         (-> history-event? void?)]{
+Returns a @racket[reporter] function that will accept events and write them to a
+standard racket @racket[logger].
+}
+
+@defproc[(make-port-reporter
+          [port output-port?])
+         (-> history-event? void?)]{
+Returns a @racket[reporter] function that will accept events and write them to a
+standard racket @racket[logger].
 }
 

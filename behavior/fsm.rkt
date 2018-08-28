@@ -31,13 +31,7 @@
         transition?)]
 
   [make-machine-execution
-   (->* (state-machine?) ((-> history-event? void?)) machine-execution?)]
-
-  [make-logging-reporter
-   (-> logger? (-> history-event? void?))]
-
-  [make-channel-reporter
-   (-> (values channel? (-> history-event? void?)))]
+   (->* (state-machine?) ((-> machine-history-event? void?)) machine-execution?)]
 
   [execution-start
    (-> machine-execution? machine-execution?)]
@@ -66,12 +60,13 @@
   machine-execution-reporter)
  
  (except-out
-  (struct-out history-event)
+  (struct-out machine-history-event)
   private-history-event))
 
 ;; ---------- Requirements
 
-(require)
+(require
+  behavior/reporter)
 
 ;; ---------- Internal types
 
@@ -106,9 +101,8 @@
    reporter)
   #:constructor-name private-machine-execution)
 
-(struct history-event
+(struct machine-history-event history-event
   (current-execution
-   time
    kind
    source
    transition
@@ -181,21 +175,13 @@
 
 ;; ---------- Implementation - Execution
 
-(define (make-logging-reporter [a-logger (current-logger)])
-  (λ (ev) (log-info (~s ev))))
-
-(define (make-channel-reporter)
-  (define reporting-channel (make-channel))
-  (values reporting-channel
-          (λ (ev) (channel-put reporting-channel ev))))
-  
 (define (make-machine-execution state-machine [reporter #f])
   (private-machine-execution state-machine
                      'created
                      #f
                      (if reporter
                          reporter
-                         (make-logging-reporter (current-output-port)))))
+                         (make-logging-reporter))))
 
 (define (execution-start exec)
   (unless (equal? (machine-execution-condition exec) 'created)
@@ -327,8 +313,8 @@
 (define (report-executed-behavior exec kind behavior [transition #f])
   ((machine-execution-reporter exec)
    (private-history-event
-    exec
     (current-inexact-milliseconds)
+    exec
     kind
     (machine-execution-current-state exec)
     transition
@@ -337,8 +323,8 @@
 (define (report-event exec event transition)
   ((machine-execution-reporter exec)
    (private-history-event
-    exec
     (current-inexact-milliseconds)
+    exec
     'handle-event
     (machine-execution-current-state exec)
     transition
@@ -347,8 +333,8 @@
 (define (report-event-error exec event transitions)
   ((machine-execution-reporter exec)
    (private-history-event
-    exec
     (current-inexact-milliseconds)
+    exec
     'event-error
     (machine-execution-current-state exec)
     #f
@@ -357,8 +343,8 @@
 (define (report-transitioning exec transition guard guard-result)
   ((machine-execution-reporter exec)
    (private-history-event
-    exec
     (current-inexact-milliseconds)
+    exec
     'transition
     (machine-execution-current-state exec)
     transition
@@ -367,19 +353,18 @@
 (define (report-complete-error exec transitions)
   ((machine-execution-reporter exec)
    (private-history-event
-    exec
     (current-inexact-milliseconds)
+    exec
     'complete-state-error
     (machine-execution-current-state exec)
     #f
     transitions)))
 
-
 (define (report-completed exec)
   ((machine-execution-reporter exec)
    (private-history-event
-    exec
     (current-inexact-milliseconds)
+    exec
     'completed
     (machine-execution-current-state exec)
     #f

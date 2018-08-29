@@ -17,6 +17,8 @@ Markov chains be used to generate events to help in simulation of systems.
 * `fsm` -- UML-style State Machines including entry/exit/do behaviors and transition effects and guards.
 * `markov-chain` -- Define the state/transition matrix for a Markov chain and execute the chain
   resulting in a stream of state events.
+* `petri-net` -- Simple Petri net model and execution.
+* `reporters` -- common mechanisms for tracking events in model execution.  
 
 # Examples
 

@@ -24,7 +24,13 @@
 ;  [make-colored-arc
 ;   (-> symbol? symbol? exact-nonnegative-integer?
 ;  (-> arc? (set/c arc?) (values boolean? (listof symbol?))) arc?)]
-  
+
+  [petri-net-place-set
+   (-> petri-net? (set/c symbol?))]
+
+  [petri-net-transition-set
+   (-> petri-net? (set/c symbol?))]
+   
   [make-net-execution
    (->* (petri-net? (hash/c symbol? (or/c exact-nonnegative-integer? (listof symbol?))))
         ((-> net-history-event? void?)) net-execution?)]
@@ -36,7 +42,12 @@
    (-> net-execution? net-execution?)]
 
   [net-execution-complete?
-   (-> net-execution? boolean?)])
+   (-> net-execution? boolean?)]
+
+  [token symbol?]
+
+  [tokens
+   (-> exact-positive-integer? (listof symbol?))])
 
   (except-out
    (struct-out petri-net)
@@ -69,16 +80,17 @@
 (struct petri-net
   (name
    colored?
-   places       ; (or/c (set/c symbol?) (hash/c symbol? symbol?))
-   transitions  ; (set/c symbol?)
+   places       ; (or/c (listof symbol?) (hash/c symbol? symbol?))
+   transitions  ; (listof symbol?)
+   arc-set      ; (set/c arc)
    arcs-from    ; (hash/c symbol? arc)
    arcs-to)     ; (hash/c symbol? arc)
   #:constructor-name private-petri-net) 
 
 (struct arc
-  (from
-   to
-   threshold    ; 0 = inhibitor
+  (source
+   target
+   multiplicity ; 0 = inhibitor
    expression)
   #:constructor-name private-arc)
 
@@ -98,6 +110,9 @@
 
 (define token (gensym))
 
+(define (tokens count)
+  (make-list count token))
+
 ;; ---------- Implementation - Definition
 
 (define (make-petri-net name places transitions arcs #:inhibitors? [inhibitors? #f])
@@ -111,6 +126,14 @@
 
 (define (make-colored-arc from to threshold expression)
   (private-arc from to threshold expression))
+
+(define (petri-net-place-set net)
+  (if (petri-net-colored? net)
+      (hash-keys (petri-net-places net))
+      (list->set (petri-net-places net))))
+
+(define (petri-net-transition-set net)
+  (list->set (petri-net-transitions)))
 
 ;; ---------- Implementation - Execution
 
@@ -134,7 +157,7 @@
           [(exact-nonnegative-integer? value)
            (hash-set! initial-configuration place (make-list value token))])
         (raise-argument-error 'make-net-execution
-                              "Specified place is not a valid place in this net"
+                              "Specified place name is not a valid place in this net"
                               place)))
   (private-net-execution net
                          initial-configuration
@@ -166,8 +189,11 @@
 
 (define (enabled? exec transition)
   (for/and ([arc (hash-ref (petri-net-arcs-to (net-execution-model exec)) transition)])
-    (define token-count (length (hash-ref (net-execution-place-tokens exec) (arc-from arc))))
-    (>= token-count (arc-threshold arc))))
+    (if (= (arc-multiplicity arc) 0)
+        #f ; inhibitor
+        (let ([token-count (length (hash-ref (net-execution-place-tokens exec)
+                                             (arc-source arc)))])
+          (>= token-count (arc-multiplicity arc))))))
 
 (define (enabled-transitions exec)
   (shuffle (filter (λ (t) (enabled? exec t))
@@ -176,18 +202,18 @@
 (define (fire-transition exec transition)
   (for ([arc (hash-ref (petri-net-arcs-to (net-execution-model exec))
                             transition)])
-    (define tokens (hash-ref (net-execution-place-tokens exec) (arc-from arc)))
+    (define tokens (hash-ref (net-execution-place-tokens exec) (arc-source arc)))
     (hash-set! (net-execution-place-tokens exec)
-               (arc-from arc)
-               (list-tail tokens (arc-threshold arc)))
-    (report-place-emits exec (arc-from arc) (take tokens (arc-threshold arc))))
+               (arc-source arc)
+               (list-tail tokens (arc-multiplicity arc)))
+    (report-place-emits exec (arc-source arc) (take tokens (arc-multiplicity arc))))
   (report-transition-firing exec transition)
   (for ([arc (hash-ref (petri-net-arcs-from (net-execution-model exec)) transition)])
-    (define tokens (hash-ref (net-execution-place-tokens exec) (arc-to arc)))
+    (define tokens (hash-ref (net-execution-place-tokens exec) (arc-target arc)))
     (hash-set! (net-execution-place-tokens exec)
-               (arc-to arc)
-               (append tokens (make-list (arc-threshold arc) token)))
-    (report-place-consumes exec (arc-to arc) (make-list (arc-threshold arc) token))))
+               (arc-target arc)
+               (append tokens (make-list (arc-multiplicity arc) token)))
+    (report-place-consumes exec (arc-target arc) (make-list (arc-multiplicity arc) token))))
 
 
 (define (evaluate-colored-transition exec transition arc)
@@ -203,14 +229,14 @@
   (define arc-list (set->list arcs))
   (when (false? inhibitors?)
     (begin
-      (define inhibited (filter (λ (arc) (= (arc-threshold arc) 0)) arc-list))
+      (define inhibited (filter (λ (arc) (= (arc-multiplicity arc) 0)) arc-list))
       (when (> (length inhibited) 0)
         (raise-argument-error who
                               "Inhibited arcs not allowed without #:inhibitors #t"
                               (set-intersect places transitions)))))
   (define place-names (if colored? (hash-keys places) places))
-  (define bad-arcs (filter (λ (arc) (not (xor (set-member? place-names (arc-from arc))
-                                              (set-member? place-names (arc-to arc)))))
+  (define bad-arcs (filter (λ (arc) (not (xor (set-member? place-names (arc-source arc))
+                                              (set-member? place-names (arc-target arc)))))
                            arc-list))
   (when (> (length bad-arcs) 0)
     (raise-argument-error who
@@ -221,9 +247,10 @@
                      ;; ignores colored? hash
                      (set->list places)
                      (set->list transitions)
+                     arcs
                      ;; TODO: below is incomplete, ignores multiple arcs to/from same place
-                     (for/hash ([arc arcs]) (values (arc-from arc) (list arc)))
-                     (for/hash ([arc arcs]) (values (arc-to arc) (list arc)))))
+                     (for/hash ([arc arcs]) (values (arc-source arc) (list arc)))
+                     (for/hash ([arc arcs]) (values (arc-target arc) (list arc)))))
 
 (define (report-place-emits exec place tokens)
   (when (net-execution-reporter exec)

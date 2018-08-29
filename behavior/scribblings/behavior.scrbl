@@ -1,13 +1,17 @@
 #lang scribble/manual
 
 @(require racket/sandbox
+          scribble/core
           scribble/eval
+          scribble-math
           behavior/fsm
           behavior/markov-chain
           behavior/petri-net
           behavior/reporter
-          (for-label racket/contract
+          (for-label racket/base
+                     racket/contract
                      racket/logging
+                     racket/set
                      behavior/fsm
                      behavior/markov-chain
                      behavior/petri-net
@@ -583,7 +587,21 @@ Return a Graphviz representation of the provided chain as a string.
 @section[]{Module behavior/petri-net}
 @defmodule[behavior/petri-net]
 
-TBD
+This module provides the ability to model, and execute, Petri nets. From
+@hyperlink["https://en.wikipedia.org/wiki/Petri_net" "Wikipedia"]):
+
+@italic{A Petri net consists of @elem[#:style plain]{places},
+ @elem[#:style plain]{transitions}, and @elem[#:style plain]{arcs}. Arcs run from a place
+ to a transition or vice versa, never between places or between transitions. The
+ places from which an arc runs to a transition are called the
+ @elem[#:style plain]{input places} of the transition; the places to which arcs
+ run from a transition are called the @elem[#:style plain]{output places} of the
+ transition.}
+
+According to the same definition "@italic{...the execution of Petri nets is
+nondeterministic: when multiple transitions are enabled at the same time,
+they will fire in any order}". To achieve this, at each step in the execution
+a single random enabled transition is chosen to fire.
 
 @examples[ #:eval example-eval
 (define net (make-petri-net 'first-net
@@ -601,23 +619,73 @@ TBD
 (execute-net exec)
 ]
 
+The model follows the usual mathematical model for an @italic{elementary net},
+as described below, with the relevant validations.
+
+@(use-mathjax)
+
+@itemlist[
+  @item{A @italic{net} is a triple @${N=(P,T,F)} where @${P} and @${T}
+    are disjoint finite sets of @italic{places} and @italic{transitions},
+    respectively.}
+  @item{@${F\subset(P \times T) \cup (T \times P)} is a set of @italic{arcs}
+    (or flow relations).}
+  @itemlist[
+    @item{An @racket[arc] @italic{may not} connect a place to a place, or a
+      transition to a transition.}]
+  @item{An elementary net is a net of the form @${EN=(N,C)} where @${N}
+    is a @italic{net} and @${C} is a @italic{configuration}.}
+  @itemlist[
+    @item{A @italic{configuration}, @${C}, is such that @${C \subseteq P}.}]
+  @item{A @italic{Petri net} @${PN=(N,M,W)} extends the elementary net with @${M}
+    @italic{markings} and @${W} @italic{weights}, or multiplicities.}
+  @itemlist[
+    @item{Each @racket[arc] also has a @racket[multiplicity] value that indicates
+      the number of tokens required from a @racket[source] place, or the
+      number of tokens provided to a @racket[target] place.}]
+  @item{The structure @racket[petri-net] and the function
+    @racket[make-petri-net] correspond to the pair @${NM=(N,W)} or
+   @italic{network model}.}
+  @itemlist[
+    @item{Both places, and transitions, are represented as a @racket[set?]
+      of @racket[symbol?].}
+    @item{No symbol may appear in both sets.}]
+  @item{The structure @racket[net-execution] corresponds to the pair
+    @${(NM,M_i)} where @${M_i} is the current set of markings across the
+    network described by @${NM}.}
+  @item{The function @racket[make-net-execution] creates the pair
+    @${(NM,M_0)} where an initial; marking @${M_0} is associated with the
+   network model.}
+  ]
+
+
 @;{============================================================================}
 @subsection[#:tag "petri:types"]{Types and Predicates}
 
 @defstruct*[petri-net
   ([name symbol?]
-   [colored? boolean?])]{
+   [colored? boolean?]
+   [place-set (set/c symbol?)]
+   [transition-set (set/c symbol?)]
+   [arc-set (listof arc?)])]{
+The implementation of the Petri net model where @racket[place-set] corresponds to
+@${P}, @racket[transition-set] corresponds to @${T}, and @racket[acr-set]
+corresponds to @${F}.
 }
 
 @defstruct*[arc
-  ([from symbol?]
-   [to symbol?]
-   [threshold exact-nonnegative-integer?])]{
+  ([source symbol?]
+   [target symbol?]
+   [multiplicity exact-nonnegative-integer?])]{
+An arc within the @racket[petri-net] model, note we include the weights from
+@${W} as individual @racket[multiplicity] values on each @racket[arc].
 }
 
 @defstruct*[net-execution
   ([model petri-net?]
    [place-tokens (hash/c symbol (listof symbol?))])]{
+This structure pairs the @racket[model] itself with a hash (from place to a list
+of tokens) that represents the current @italic{marking}, @${M_i}, of the execution.
 }
 
 @defstruct*[(net-history-event history-event)
@@ -625,8 +693,12 @@ TBD
    [kind symbol?]
    [place-or-transition symbol?]
    [tokens list?])]{
+An event sent to a reporter function (see @secref["Module_behavior_reporter"
+#:doc '(lib "behavior/scribblings/behavior.scrbl")]) with details of state changes
+in the execution. The value of @racket[kind] will determine the valid values of
+the other fields. Currently these values include @racket['emits], @racket['firing],
+@racket['consumes], and @racket['completed].
 }
-
 
 @;{============================================================================}
 @subsection[#:tag "petri:construction"]{Construction}
@@ -634,18 +706,23 @@ TBD
 
 @defproc[(make-petri-net
           [name symbol?]
-          [places (set/c symbol?)]
-          [transitions (set/c symbol?)]
-          [arcs (set/c arc?)]
+          [place-set (set/c symbol?)]
+          [transition-set (set/c symbol?)]
+          [arc-set (set/c arc?)]
           [#:inhibitors? inhibitors? boolean? #f])
         petri-net?]{
+Construct a new @racket[petri] net using the places, transitions, and arcs
+specified. The value of the keyword parameter @racket[inhibitors?] determines
+whether the multiplicity of an @racket[arc] may be 0.
 }
   
 @defproc[(make-arc
-          [from symbol?]
-          [to symbol?]
-          [threshold exact-nonnegative-integer?])
+          [source symbol?]
+          [target symbol?]
+          [multiplicity exact-nonnegative-integer?])
          arc?]{
+Construct a new @racket[arc] from @racket[source] to @racket[target] with the
+provided @racket[mutiplicity].
 }
 
 @;{============================================================================}
@@ -654,24 +731,48 @@ TBD
 
 @defproc[(make-net-execution
           [model petri-net?]
-          [configuration (hash/c symbol? (or/c exact-nonnegative-integer? (listof symbol?)))]
+          [configuration (hash/c symbol?
+                                 (or/c exact-nonnegative-integer?
+                                       (listof symbol?)))]
           [reporter (-> net-history-event? void?) #f])
          net-execution?]{
+Construct a new execution from the provided @racket[petri-net] @italic{model}. The
+@racket[configuration] represents the initial, @italic{marking} @${M_0}, marking
+of the execution. A @racket[reporter] function can be provided to receive
+history events.
 }
 
 @defproc[(execute-net
          [exec net-execution?])
          net-execution?]{
+Execute the net (repeating @racket[execute-net-step]) until
+@racket[net-execution-complete?].
 }
 
 @defproc[(execute-net-step
           [exec net-execution?])
          net-execution?]{
+Select and @italic{fire} an enabled transition, mapping from marking @${M_i}
+into mapping @${M_{i+1}}.
 }
 
 @defproc[(net-execution-complete?
           [exec net-execution?])
          boolean?]{
+A network is complete if there are no @italic{enabled} transitions. 
+                                      
+@$${\neg \exists t \in T : (\forall p : M_p \geq W_{p,t})}
+}
+
+@defthing[token symbol?]{
+The default symbol used as a token when constructing a marking.
+}
+
+@defproc[(tokens
+          [count exact-positive-integer?])
+         (listof symbol?)]{
+Construct a list of @racket[count] copies of @racket[token]. This is used
+in the construction of initial configurations.
 }
 
 @;{============================================================================}

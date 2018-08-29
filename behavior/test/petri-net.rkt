@@ -190,6 +190,40 @@
             (λ ()
               (make-net-execution net (hash 'P0 1)))))
 
+
+(test-case
+ "make-net-execution: missing configuration"
+ (define net (make-petri-net 'first-net
+                             (set 'P1 'P2 'P3 'P4)
+                             (set 'T1 'T2)
+                             (set (make-arc 'P1 'T1 1)
+                                  (make-arc 'T1 'P2 1)
+                                  (make-arc 'T1 'P3 1)
+                                  (make-arc 'P2 'T2 1)
+                                  (make-arc 'P3 'T2 1)
+                                  (make-arc 'T2 'P4 1)
+                                  (make-arc 'T2 'P1 1))))
+ (check-exn exn:fail:contract?
+            (λ ()
+              (make-net-execution net (hash)))))
+
+
+(test-case
+ "make-net-execution: fail on zeroed configuration"
+ (define net (make-petri-net 'first-net
+                             (set 'P1 'P2 'P3 'P4)
+                             (set 'T1 'T2)
+                             (set (make-arc 'P1 'T1 1)
+                                  (make-arc 'T1 'P2 1)
+                                  (make-arc 'T1 'P3 1)
+                                  (make-arc 'P2 'T2 1)
+                                  (make-arc 'P3 'T2 1)
+                                  (make-arc 'T2 'P4 1)
+                                  (make-arc 'T2 'P1 1))))
+ (check-exn exn:fail:contract?
+            (λ ()
+              (make-net-execution net (hash 'P1 0)))))
+
 (test-case
  "execute-net-step: success"
  (define net (make-petri-net 'first-net

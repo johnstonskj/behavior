@@ -153,7 +153,7 @@
           [(list? value)
            (hash-set! initial-configuration place value)]
           [(exact-nonnegative-integer? value)
-           (hash-set! initial-configuration place (make-list value token))])
+           (hash-set! initial-configuration place (tokens value))])
         (raise-argument-error 'make-net-execution
                               "Specified place name is not a valid place in this net"
                               place)))

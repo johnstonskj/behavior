@@ -75,92 +75,92 @@
  "make-state-machine: fail on no start event"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'normal)
-                          (make-state 'goodbye 'final))
-                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'normal)
+                     (make-state 'goodbye 'final))
+               (list (make-transition 'hello 'goodbye #:on-event 'wake))
+               '(sleep)))))
 
 (test-case
  "make-state-machine: fail on two start events"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'start)
-                          (make-state 'goodbye 'start))
-                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'start)
+                     (make-state 'goodbye 'start))
+               (list (make-transition 'hello 'goodbye #:on-event 'wake))
+               '(sleep)))))
 
 (test-case
  "make-state-machine: fail on no final event"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'start)
-                          (make-state 'goodbye 'normal))
-                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'start)
+                     (make-state 'goodbye 'normal))
+               (list (make-transition 'hello 'goodbye #:on-event 'wake))
+               '(sleep)))))
 
 (test-case
  "make-state-machine: fail on two final events"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'final)
-                          (make-state 'goodbye 'final))
-                    (list (make-transition 'hello 'goodbye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'final)
+                     (make-state 'goodbye 'final))
+               (list (make-transition 'hello 'goodbye #:on-event 'wake))
+               '(sleep)))))
 
 (test-case
  "make-state-machine: fail on bad transition source"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'start)
-                          (make-state 'goodbye 'final))
-                    (list (make-transition 'hi 'goodbye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'start)
+                     (make-state 'goodbye 'final))
+               (list (make-transition 'hi 'goodbye #:on-event 'wake))
+               '(sleep)))))
 
 
 (test-case
  "make-state-machine: fail on bad transition target"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'start)
-                          (make-state 'goodbye 'final))
-                    (list (make-transition 'hello 'bye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'start)
+                     (make-state 'goodbye 'final))
+               (list (make-transition 'hello 'bye #:on-event 'wake))
+               '(sleep)))))
 
 (test-case
  "make-state-machine: fail on multiple unguarded"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'start)
-                          (make-state 'wait 'normal)
-                          (make-state 'goodbye 'final))
-                    (list (make-transition 'hello 'wait)
-                          (make-transition 'hello 'goodbye #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'start)
+                     (make-state 'wait 'normal)
+                     (make-state 'goodbye 'final))
+               (list (make-transition 'hello 'wait)
+                     (make-transition 'hello 'goodbye #:on-event 'wake))
+               '(sleep)))))
 
 (test-case
  "make-state-machine: fail on bad internal transition"
  (check-exn exn:fail:contract?
             (λ ()
-              ((make-state-machine
-                    'first-fsm
-                    (list (make-state 'hello 'start)
-                          (make-state 'goodbye 'final))
-                    (list (make-transition 'hello 'goodbye #t #:on-event 'wake))
-                    '(sleep))))))
+              (make-state-machine
+               'first-fsm
+               (list (make-state 'hello 'start)
+                     (make-state 'goodbye 'final))
+               (list (make-transition 'hello 'goodbye #t #:on-event 'wake))
+               '(sleep)))))
 
 ;; ---------- Test Cases - Execution
 

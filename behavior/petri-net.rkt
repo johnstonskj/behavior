@@ -80,7 +80,7 @@
 (struct petri-net
   (name
    colored?
-   places       ; (or/c (listof symbol?) (hash/c symbol? symbol?))
+   places       ; (hash/c symbol? symbol?)
    transitions  ; (listof symbol?)
    arc-set      ; (set/c arc)
    arcs-from    ; (hash/c symbol? arc)
@@ -92,7 +92,7 @@
    target
    multiplicity ; 0 = inhibitor
    expression)
-  #:constructor-name private-arc)
+  #:constructor-name private-arc #:transparent)
 
 (struct net-execution
   (model
@@ -128,9 +128,7 @@
   (private-arc from to threshold expression))
 
 (define (petri-net-place-set net)
-  (if (petri-net-colored? net)
-      (hash-keys (petri-net-places net))
-      (list->set (petri-net-places net))))
+  (list->set (hash-keys (petri-net-places net))))
 
 (define (petri-net-transition-set net)
   (list->set (petri-net-transitions)))
@@ -147,7 +145,7 @@
                           "initial configuration may not be (effectively) empty"
                           configuration))
 
-  (define initial-configuration (hash-copy (for/hash ([place (place-names net)])
+  (define initial-configuration (hash-copy (for/hash ([place (petri-net-place-set net)])
                                              (values place '()))))
   (for ([(place value) configuration])
     (if (hash-has-key? initial-configuration place)
@@ -182,18 +180,16 @@
 
 ;; ---------- Internal procedures
 
-(define (place-names net)
-  (if (petri-net-colored? net)
-      (hash-keys (petri-net-places net))
-      (petri-net-places net)))
-
 (define (enabled? exec transition)
   (for/and ([arc (hash-ref (petri-net-arcs-to (net-execution-model exec)) transition)])
-    (if (= (arc-multiplicity arc) 0)
+    (if (inhibited? arc)
         #f ; inhibitor
         (let ([token-count (length (hash-ref (net-execution-place-tokens exec)
                                              (arc-source arc)))])
           (>= token-count (arc-multiplicity arc))))))
+
+(define (inhibited? arc)
+  (= (arc-multiplicity arc) 0))
 
 (define (enabled-transitions exec)
   (shuffle (filter (λ (t) (enabled? exec t))
@@ -222,6 +218,18 @@
   #f)
 
 (define (validate-net who colored? name places transitions arcs inhibitors?)
+  (when (= (set-count places) 0)
+    (raise-argument-error who
+                          "places set must not be empty"
+                          places))
+  (when (= (set-count transitions) 0)
+    (raise-argument-error who
+                          "transitions set must not be empty"
+                          transitions))
+  (when (= (set-count arcs) 0)
+    (raise-argument-error who
+                          "arcs set must not be empty"
+                          arcs))
   (unless (= (set-count (set-intersect places transitions)) 0)
     (raise-argument-error who
                           "Place and transition names must be distinct"
@@ -234,23 +242,35 @@
         (raise-argument-error who
                               "Inhibited arcs not allowed without #:inhibitors #t"
                               (set-intersect places transitions)))))
-  (define place-names (if colored? (hash-keys places) places))
-  (define bad-arcs (filter (λ (arc) (not (xor (set-member? place-names (arc-source arc))
-                                              (set-member? place-names (arc-target arc)))))
+  (define place-list (if colored? (hash-keys places) places))
+  (define source-list (set->list (set-union places transitions)))
+  (define bad-arc-targets (filter (λ (arc) (or (false? (member (arc-source arc) source-list))
+                                               (false? (member (arc-target arc) source-list))))
+                           arc-list))
+  (when (> (length bad-arc-targets) 0)
+    (raise-argument-error who
+                          "Arc from/to must be a place or transition symbol"
+                          bad-arc-targets))
+  (define bad-arcs (filter (λ (arc) (not (xor (set-member? place-list (arc-source arc))
+                                              (set-member? place-list (arc-target arc)))))
                            arc-list))
   (when (> (length bad-arcs) 0)
     (raise-argument-error who
                           "Arc from/to must not be between place/place or transition/transition"
                           bad-arcs))
+  
   (private-petri-net name
                      colored?
-                     ;; ignores colored? hash
-                     (set->list places)
+                     (for/hash ([place (set->list places)])
+                       (values place token))
                      (set->list transitions)
                      arcs
-                     ;; TODO: below is incomplete, ignores multiple arcs to/from same place
-                     (for/hash ([arc arcs]) (values (arc-source arc) (list arc)))
-                     (for/hash ([arc arcs]) (values (arc-target arc) (list arc)))))
+                     (for/hash ([source source-list])
+                       (values source
+                               (filter (λ (arc) (equal? (arc-source arc) source)) arc-list)))
+                     (for/hash ([source source-list])
+                       (values source
+                               (filter (λ (arc) (equal? (arc-target arc) source)) arc-list)))))
 
 (define (report-place-emits exec place tokens)
   (when (net-execution-reporter exec)

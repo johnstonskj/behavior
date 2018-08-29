@@ -30,6 +30,16 @@ Define a state machine, a simple one, a start and an end with a transition trigg
  (list (make-transition 'hello 'goodbye #:on-event 'wake)))
 ```
 
+Execute the state machine.
+
+```scheme
+(let* ([exec (make-machine-execution simple-fsm (make-logging-reporter))]
+       [started (machine-execution-start exec)]
+       [next1 (handle-event started 'sleep)]
+       [next2 (handle-event next1 'wake)])
+      (state-machine-complete? next2))
+```
+
 Define a Markov chain with 3 states.
 
 ```scheme
@@ -47,5 +57,22 @@ Execute the chain with 10 steps and display the history of events.
 (displayln (execution-trace an-exec))
 (displayln (mkchain->graph-string a-chain))
 ```
+
+Define a simple Petri net, two places, one transition.
+
+```scheme
+(define net (make-petri-net 'first-net
+                             (set 'a 'b)
+                             (set 't)
+                             (set (make-arc 'a 't 1)
+                                  (make-arc 't 'b 1))))
+```
+
+Execute the Petri net with an initial configuration that has a single token at place "a".
+
+```scheme
+(define exec (make-net-execution net (hash 'a 1)))
+(execute-net exec)
+ ```
 
 [![Racket Language](https://racket-lang.org/logo-and-text-1-2.png)](https://racket-lang.org/)

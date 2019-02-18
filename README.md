@@ -24,7 +24,7 @@ Markov chains be used to generate events to help in simulation of systems.
 
 Define a state machine, a simple one, a start and an end with a transition triggered by a single event.
 
-```scheme
+```racket
 (make-state-machine
  'first-fsm
  (list (make-state 'hello 'start)
@@ -34,7 +34,7 @@ Define a state machine, a simple one, a start and an end with a transition trigg
 
 Execute the state machine.
 
-```scheme
+```racket
 (let* ([exec (make-machine-execution simple-fsm (make-logging-reporter))]
        [started (machine-execution-start exec)]
        [next1 (handle-event started 'sleep)]
@@ -44,7 +44,7 @@ Execute the state machine.
 
 Define a Markov chain with 3 states.
 
-```scheme
+```racket
 (define a-chain (make-chain 
                  (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
                  (==> 'b (--> 'a .5) (--> 'c .5))
@@ -53,7 +53,7 @@ Define a Markov chain with 3 states.
 
 Execute the chain with 10 steps and display the history of events.
 
-```scheme
+```racket
 (define an-exec (make-execution a-chain 'b))
 (execute an-exec 10)
 (displayln (execution-trace an-exec))
@@ -62,7 +62,7 @@ Execute the chain with 10 steps and display the history of events.
 
 Define a simple Petri net, two places, one transition.
 
-```scheme
+```racket
 (define net (make-petri-net 'first-net
                              (set 'a 'b)
                              (set 't)
@@ -72,7 +72,7 @@ Define a simple Petri net, two places, one transition.
 
 Execute the Petri net with an initial configuration that has a single token at place "a".
 
-```scheme
+```racket
 (define exec (make-net-execution net (hash 'a 1)))
 (execute-net exec)
  ```

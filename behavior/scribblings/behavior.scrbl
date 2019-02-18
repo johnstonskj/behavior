@@ -329,7 +329,7 @@ events in which the probability of each event depends only on the state attained
 in the previous event}".
 
 @examples[ #:eval example-eval
-(define a-chain (make-chain 
+(define a-chain (make-chain 'example
                  (==> 'a (--> 'a .5) (--> 'b .25) (--> 'c .25))
                  (==> 'b (--> 'a .5) (--> 'c .5))
                  (==> 'c (--> 'a .25) (--> 'b .25) (--> 'c .5))))
@@ -430,7 +430,8 @@ Make a new @racket[mkchain] structure from the list of symbol and row pairs.
  These pairs can be constructed using the @racket[==>] and @racket[==>] functions.
 
 @examples[ #:eval example-eval
-(make-chain (==> 'a (--> 'a .3) (--> 'b .7))
+(make-chain 'example
+            (==> 'a (--> 'a .3) (--> 'b .7))
             (==> 'b (--> 'b .7) (--> 'c .3))
             (==>! 'c))
 ]

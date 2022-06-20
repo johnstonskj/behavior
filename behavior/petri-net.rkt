@@ -13,17 +13,17 @@
         (#:inhibitors? boolean?)
         petri-net?)]
   
-;  [make-colored-petri-net
-;   (->* (symbol? (hash/c symbol? symbol?) (set/c symbol?) (set/c arc?))
-;        (#:inhibitors? boolean?)
-;        petri-net?)]
+  [make-colored-petri-net
+   (->* (symbol? (hash/c symbol? symbol?) (set/c symbol?) (set/c arc?))
+        (#:inhibitors? boolean?)
+        petri-net?)]
 
   [make-arc
    (-> symbol? symbol? exact-nonnegative-integer? arc?)]
 
-;  [make-colored-arc
-;   (-> symbol? symbol? exact-nonnegative-integer?
-;  (-> arc? (set/c arc?) (values boolean? (listof symbol?))) arc?)]
+  [make-colored-arc
+   (-> symbol? symbol? exact-nonnegative-integer?
+       (-> arc? (hash/c arc? (listof symbol?)) boolean?) arc?)]
 
   [petri-net-place-set
    (-> petri-net? (set/c symbol?))]

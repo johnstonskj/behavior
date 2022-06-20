@@ -659,6 +659,9 @@ as described below, with the relevant validations.
    network model.}
   ]
 
+Initial, but incomplete, support is also provided for
+@hyperlink["http://scienceblogs.com/goodmath/2007/10/10/colored-petri-nets/"
+           "Colored Petri nets"].
 
 @;{============================================================================}
 @subsection[#:tag "petri:types"]{Types and Predicates}
